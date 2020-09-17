@@ -1,0 +1,8 @@
+outputs/
+resources/
+venv/
+
+*.pdf
+*.py[cod]
+*.log
+*.png
