@@ -21,15 +21,21 @@ def main():
     fileNameList = ['part1OCR.txt','part2OCR.txt']
 
     for filename in fileNameList:
+
+        if filename == 'part1OCR.txt':
+            continue
+
         f = dataPath+filename
 
         stationTextDict = splitTextIntoStations(filename,f)
 
+        dfEnvInfo = getEnvironmentInfo(stationTextDict, filename=filename,f=f)
+        #dfEnvInfo = getEnvironmentInfo(filename=filename,f=f)
+
         dfParsed = parseSpeciesNamesGNRD(stationTextDict,filename=filename,f=f)
 
         dfVerifiedSpecies = verifySpeciesNamesGNI(dfParsed, filename=filename, f=f)
-
-        dfEnvInfo = getEnvironmentInfo(stationTextDict, filename=filename,f=f)
+        #dfVerifiedSpecies = verifySpeciesNamesGNI(filename=filename, f=f)
 
     # merge files from part 1 and part 2 summaries
     mergefiles(fileNameList)
@@ -259,6 +265,7 @@ def parseSpeciesNamesGNRD(stationTextDict, filename, f):
     return df
 
 def verifySpeciesNamesGNI(df, filename, f):
+#def verifySpeciesNamesGNI(filename, f):
 
     """ Request http://resolver.globalnames.org/name_resolvers.json """
 
@@ -269,6 +276,13 @@ def verifySpeciesNamesGNI(df, filename, f):
     df = pd.read_csv(loadName)
 
     isKnownNameList = []
+    dataSourceList = []
+    gniUUIDList = []
+    classificationPathList = []
+    classificationPathRankList = []
+    vernacularsList = []
+    canonicalFormList = []
+
     for i,row in df.iterrows():
         nameString = "?names="
         name = row.speciesName
@@ -278,32 +292,134 @@ def verifySpeciesNamesGNI(df, filename, f):
         #nameString += newName
         #nameString = nameString[:-1]
 
-        best_match_only = "&best_match_only=true" # return one match
-        resolve_once = "&resolve_once=true" # first match ==> much faster
+        # parameters
+        # {'with_context': False,
+        # 'header_only': False,
+        # 'with_canonical_ranks': False,
+        # 'with_vernaculars': False,
+        # 'best_match_only': True,
+        # 'data_sources': [],
+        # 'preferred_data_sources': [],
+        # 'resolve_once': True}}
+        with_context = "&with_context=true"
+        header_only = "&header_only=false"
+        with_canonical_ranks = "&with_canonical_ranks=true"
+        with_vernaculars = "&with_vernaculars=true"
+        best_match_only = "&best_match_only=true"
+        resolve_once = "&resolve_once=false"
+        #resolve_once = "&resolve_once=true" # first match ==> much faster
         urlGNI = "http://resolver.globalnames.org/name_resolvers.json?"
-        urlFull = urlGNI + nameString + best_match_only + resolve_once
+        urlFull = urlGNI + nameString + with_context \
+                                      + header_only \
+                                      + with_canonical_ranks \
+                                      + with_vernaculars \
+                                      + best_match_only \
+                                      + resolve_once
+        #urlFull = urlGNI + nameString + best_match_only + resolve_once
+        # the stuff that is commented out now was the query for quick runs
+
         print(urlFull)
 
-        r = requests.get(urlFull)
-        print(r)
-
         try:
+            r = requests.get(urlFull)
+            print(r)
+
+            # r.json() is what is returned by the server
             print(r.json())
             print("Verified {}.".format(name))
             for nameDict in r.json()["data"]:
-                isKnownNameList.append(nameDict['is_known_name'])
+
+                """
+                print("nameDict",nameDict)
+                print("nameDict['results']",nameDict['results'])
+                print("type(nameDict['results'])",type(nameDict['results']))
+                print("nameDict['results'][0]",nameDict['results'][0])
+                print("type(nameDict['results'][0])",type(nameDict['results'][0]))
+                """
+
+                try:
+                    isKnownNameList.append(nameDict['is_known_name'])
+                    print("nameDict['is_known_name']",
+                           nameDict['is_known_name'])
+                except Exception as e:
+                    print(e)
+                    isKnownNameList.append("")
+
+                try:
+                    dataSourceList.append(nameDict['results'][0]['data_source_title'])
+                    print("nameDict['results'][0]['data_source_title']",
+                           nameDict['results'][0]['data_source_title'])
+                except Exception as e:
+                    print(e)
+                    dataSourceList.append("")
+
+                try:
+                    gniUUIDList.append(nameDict['results'][0]['gni_uuid'])
+                    print("nameDict['results'][0]['gni_uuid']",
+                           nameDict['results'][0]['gni_uuid'])
+                except Exception as e:
+                    print(e)
+                    gniUUIDList.append("")
+
+                try:
+                    canonicalFormList.append(nameDict['results'][0]['canonical_form'])
+                    print("nameDict['results'][0]['canonical_form']",
+                           nameDict['results'][0]['canonical_form'])
+                except Exception as e:
+                    print(e)
+                    canonicalFormList.append("")
+
+                try:
+                    classificationPathList.append(nameDict['results'][0]['classification_path'])
+                    print("nameDict['results'][0]['classification_path']",
+                           nameDict['results'][0]['classification_path'])
+                except Exception as e:
+                    print(e)
+                    classificationPathList.append("")
+
+                try:
+                    classificationPathRankList.append(nameDict['results'][0]['classification_path_ranks'])
+                    print("nameDict['results'][0]['classification_path_ranks']",
+                           nameDict['results'][0]['classification_path_ranks'])
+                except Exception as e:
+                    print(e)
+                    classificationPathRankList.append("")
+
+                try:
+                    vernacularsList.append(nameDict['results'][0]['vernaculars'][0]['name'])
+                    print("nameDict['results'][0]['vernaculars'][0]['name']",
+                           nameDict['results'][0]['vernaculars'][0]['name'])
+                except Exception as e:
+                    print(e)
+                    vernacularsList.append("")
+
 
                 #dfVerifiedNames = dfVerifiedNames.append({
                 #     "speciesName":nameDict['supplied_name_string'],
                 #     "is_known_name":nameDict['is_known_name'],
                 #     }, ignore_index=True)
-        except:
-            print("No .json returned by server - did not verify this species")
+        except Exception as e:
+            print(e)
+            isKnownNameList.append("")
+            dataSourceList.append("")
+            gniUUIDList.append("")
+            canonicalFormList.append("")
+            classificationPathList.append("")
+            classificationPathRankList.append("")
+            vernacularsList.append("")
 
 
+    df['vernacular'] = vernacularsList
+    df['canonicalForm'] = canonicalFormList
     df['verified'] = isKnownNameList
+    df['dataSource'] = dataSourceList
+    df['gniUUID'] = gniUUIDList
+    df['classificationPath'] = classificationPathList
+    df['classificationPathRank'] = classificationPathRankList
 
 
+
+    # old version
     """
     speciesNameList = df['speciesName']
     l = len(speciesNameList)
@@ -342,6 +458,7 @@ def verifySpeciesNamesGNI(df, filename, f):
 
 
 def getEnvironmentInfo(stationTextDict, filename,f):
+#def getEnvironmentInfo(filename,f):
 
     """ Takes in text file and parses for environment information """
 
@@ -373,10 +490,21 @@ def getEnvironmentInfo(stationTextDict, filename,f):
                    'currentWaterDensitySurface',
                    'currentWaterDensitySurfaceNumber',
                    'currentWaterDensityBottom',
-                   'currentWaterDensityBottomNumber']
+                   'currentWaterDensityBottomNumber',
+                   'lineNumberOfDate',
+                   'lineNumberOfLatLong',
+                   'lineNumberAirTempNoon',
+                   'lineNumberOfAirTempDailyMean',
+                   'lineNumberOfWaterTempSurface',
+                   'lineNumberOfWaterTempBottom',
+                   'lineNumberOfWaterDensitySurface',
+                   'lineNumberOfWaterDensityBottom'
+                   ]
 
     df = pd.DataFrame(columns = columnNames)
     stationsSeenSoFar = 0
+
+    lineNumberFromBeginningOfText = 0
 
     for key,val in stationTextDict.items():
 
@@ -403,6 +531,14 @@ def getEnvironmentInfo(stationTextDict, filename,f):
         currentWaterDensitySurfaceNumber=""
         currentWaterDensityBottom=""
         currentWaterDensityBottomNumber=""
+        lineNumberOfDate=""
+        lineNumberOfLatLong=""
+        lineNumberAirTempNoon=""
+        lineNumberOfAirTempDailyMean=""
+        lineNumberOfWaterTempSurface=""
+        lineNumberOfWaterTempBottom=""
+        lineNumberOfWaterDensitySurface=""
+        lineNumberOfWaterDensityBottom=""
 
         stationsSeenSoFar += 1
 
@@ -427,7 +563,7 @@ def getEnvironmentInfo(stationTextDict, filename,f):
 
         #line = fileFromString.readline()
 
-        lineNumber = 0
+        lineNumberFromStationBegin = 0
 
         firstLatLong = True
         firstAirTemp = True
@@ -436,8 +572,9 @@ def getEnvironmentInfo(stationTextDict, filename,f):
         #firstDeposit = True
         for line in val.splitlines():
 
-            lineNumber += 1
+            lineNumberFromStationBegin += 1
 
+            lineNumberFromBeginningOfText += 1
             #print(line)
 
             #print("{}% {}/{}".format(100*round(j/lenText,2),j,lenText))
@@ -462,6 +599,10 @@ def getEnvironmentInfo(stationTextDict, filename,f):
                     try:
                         currentDate = line.split(";")[0]
                         currentDMSCoords = line.split(';')[1]
+
+
+                        lineNumberOfDate=lineNumberFromBeginningOfText
+                        lineNumberOfLatLong=lineNumberFromBeginningOfText
 
                         print("line",line)
                         print("currentDate",currentDate)
@@ -591,24 +732,44 @@ def getEnvironmentInfo(stationTextDict, filename,f):
                 #print("temp air",line)
                 #time.sleep(3)
 
+                lineNumberAirTempNoon=lineNumberFromBeginningOfText
+                lineNumberOfAirTempDailyMean=lineNumberFromBeginningOfText
+
                 # fix for line 33964 of part 1 summary
                 # 5.45 p.M. made sail and proceeded towards the Crozet Islands. Temperature of air at
                 if ";" in line:
                     currentAirTempNoon = line.split(";")[0]
                     currentAirTempNoonDegree = currentAirTempNoon.split(",")[1]
+                    currentAirTempNoonDegree = re.sub("[^0-9]", "", \
+                                                currentAirTempNoonDegree)
+                    currentAirTempNoonDegree = currentAirTempNoonDegree[0:-1]+\
+                                                "."+currentAirTempNoonDegree[-1]
 
                     try:
                         currentAirTempDailyMean = line.split(";")[1]
                         currentAirTempDailyMeanDegree = currentAirTempDailyMean.split(",")[1]
                         try:
                             currentAirTempDailyMeanDegree = currentAirTempDailyMeanDegree.split(".")[0]
+                            currentAirTempDailyMeanDegree = re.sub("[^0-9]", "", \
+                                                            currentAirTempDailyMeanDegree)
+                            currentAirTempDailyMeanDegree = currentAirTempDailyMeanDegree[0:-1]+\
+                                                            "."+currentAirTempDailyMeanDegree[-1]
+
                         except:
-                            currentAirTempDailyMeanDegree = currentAirTempDailyMeanDegree
+                            currentAirTempDailyMeanDegree = re.sub("[^0-9]", "", \
+                                                            currentAirTempDailyMeanDegree)
+                            currentAirTempDailyMeanDegree = currentAirTempDailyMeanDegree[0:-1]+\
+                                                            "."+currentAirTempDailyMeanDegree[-1]
+
                     except:
                         currentAirTempDailyMean = ""
                 else:
                     currentAirTempNoon = line
                     currentAirTempNoonDegree = currentAirTempNoon.split(",")[1]
+                    currentAirTempNoonDegree = re.sub("[^0-9]", "", \
+                                                currentAirTempNoonDegree)
+                    currentAirTempNoonDegree = currentAirTempNoonDegree[0:-1]+\
+                                                "."+currentAirTempNoonDegree[-1]
                     currentAirTempDailyMean = ""
                     currentAirTempDailyMeanDegree = ""
 
@@ -617,28 +778,55 @@ def getEnvironmentInfo(stationTextDict, filename,f):
                 #print("temp water",line)
                 #time.sleep(3)
 
+                lineNumberOfWaterTempSurface=lineNumberFromBeginningOfText
+                lineNumberOfWaterTempBottom=lineNumberFromBeginningOfText
+
                 if ";" in line:
                     currentWaterTempSurface = line.split(";")[0]
                     try:
                         currentWaterTempSurfaceDegree = currentWaterTempSurface.split(",")[1]
+                        currentWaterTempSurfaceDegree = re.sub("[^0-9]", "", \
+                                                        currentWaterTempSurfaceDegree)
+                        currentWaterTempSurfaceDegree = currentWaterTempSurfaceDegree[0:-1]+\
+                                                        "."+currentWaterTempSurfaceDegree[-1]
+
                     except:
-                        currentWaterTempSurfaceDegree = ""
+                        #currentWaterTempSurfaceDegree = ""
+                        currentWaterTempSurfaceDegree = re.sub("[^0-9]", "", \
+                                                        currentWaterTempSurface)
+                        currentWaterTempSurfaceDegree = currentWaterTempSurfaceDegree[0:-1]+\
+                                                        "."+currentWaterTempSurfaceDegree[-1]
 
                     try:
                         currentWaterTempBottom = line.split(";")[1]
                         currentWaterTempBottomDegree = currentWaterTempBottom.split(",")[1]
                         try:
                             currentWaterTempBottomDegree = currentWaterTempBottomDegree.split(".")[0]
+                            currentWaterTempBottomDegree = re.sub("[^0-9]", "", \
+                                                            currentWaterTempBottomDegree)
+                            currentWaterTempBottomDegree = currentWaterTempBottomDegree[0:-1]+\
+                                                            "."+currentWaterTempBottomDegree[-1]
+
                         except:
                             currentWaterTempBottomDegree = currentWaterTempBottomDegree
+                            currentWaterTempBottomDegree = re.sub("[^0-9]", "", \
+                                                            currentWaterTempBottomDegree)
+                            currentWaterTempBottomDegree = currentWaterTempSurfaceDegree[0:-1]+\
+                                                            "."+currentWaterTempBottomDegree[-1]
+
                     except:
                         currentWaterTempBottom = ""
                 else:
                     currentWaterTempSurface = line
                     try:
                         currentWaterTempSurfaceDegree = currentWaterTempSurface.split(",")[1]
+                        currentWaterTempSurfaceDegree = re.sub("[^0-9]", "", \
+                                                        currentWaterTempSurfaceDegree)
+                        currentWaterTempSurfaceDegree = currentWaterTempSurfaceDegree[0:-1]+\
+                                                        "."+currentWaterTempSurfaceDegree[-1]
                     except:
                         currentWaterTempSurfaceDegree = ""
+
                     currentWaterTempBottom = ""
                     currentWaterTempBottomDegree = ""
                     # need to fix if in the form:
@@ -663,23 +851,42 @@ def getEnvironmentInfo(stationTextDict, filename,f):
                 #print("density",line)
                 #time.sleep(3)
 
+                lineNumberOfWaterDensitySurface=lineNumberFromBeginningOfText
+                lineNumberOfWaterDensityBottom=lineNumberFromBeginningOfText
+
                 if ";" in line:
                     currentWaterDensitySurface = line.split(";")[0]
                     currentWaterDensitySurfaceNumber = currentWaterDensitySurface.split(",")[1]
-                    #currentWaterDensitySurfaceNumber = re.sub("[^0-9]", "",currentWaterDensitySurfaceNumber)
+                    currentWaterDensitySurfaceNumber = re.sub("[^0-9]", "", \
+                                                    currentWaterDensitySurfaceNumber)
+                    currentWaterDensitySurfaceNumber = currentWaterDensitySurfaceNumber[0]+\
+                                                    "."+currentWaterDensitySurfaceNumber[1:]
 
                     currentWaterDensityBottom = line.split(";")[1]
                     currentWaterDensityBottomNumber = currentWaterDensityBottom.split(",")[1]
                     try:
                         currentWaterDensityBottomNumber = currentWaterDensityBottomNumber.split(".")[0]
+                        currentWaterDensityBottomNumber = re.sub("[^0-9]", "", \
+                                                        currentWaterDensityBottomNumber)
+                        currentWaterDensityBottomNumber = currentWaterDensityBottomNumber[0]+\
+                                                        "."+currentWaterDensityBottomNumber[1:]
+
                     except:
-                        currentWaterDensityBottomNumber = currentWaterDensityBottomNumber
+                        currentWaterDensityBottomNumber = re.sub("[^0-9]", "", \
+                                                        currentWaterDensityBottomNumber)
+                        currentWaterDensityBottomNumber = currentWaterDensityBottomNumber[0]+\
+                                                        "."+currentWaterDensityBottomNumber[1:]
 
                 else:
                     try:
                         currentWaterDensitySurface = line
                         currentWaterDensitySurfaceNumber = currentWaterDensitySurface.split(",")[1]
-                        #currentWaterDensitySurfaceNumber = re.sub("[^0-9]", "",currentWaterDensitySurfaceNumber)
+                        currentWaterDensitySurfaceNumber = re.sub("[^0-9]", "", \
+                                                        currentWaterDensitySurfaceNumber)
+                        currentWaterDensitySurfaceNumber = currentWaterDensitySurfaceNumber[0]+\
+                                                        "."+currentWaterDensitySurfaceNumber[1:]
+
+
                     except:
                         currentWaterDensitySurface = ""
                         currentWaterDensitySurfaceNumber = ""
@@ -725,13 +932,22 @@ def getEnvironmentInfo(stationTextDict, filename,f):
                'currentWaterDensitySurface':currentWaterDensitySurface,
                'currentWaterDensitySurfaceNumber':currentWaterDensitySurfaceNumber,
                'currentWaterDensityBottom':currentWaterDensityBottom,
-               'currentWaterDensityBottomNumber':currentWaterDensityBottomNumber}
+               'currentWaterDensityBottomNumber':currentWaterDensityBottomNumber,
+               'lineNumberOfDate':lineNumberOfDate,
+               'lineNumberOfLatLong':lineNumberOfLatLong,
+               'lineNumberAirTempNoon':lineNumberAirTempNoon,
+               'lineNumberOfAirTempDailyMean':lineNumberOfAirTempDailyMean,
+               'lineNumberOfWaterTempSurface':lineNumberOfWaterTempSurface,
+               'lineNumberOfWaterTempBottom':lineNumberOfWaterTempBottom,
+               'lineNumberOfWaterDensitySurface':lineNumberOfWaterDensitySurface,
+               'lineNumberOfWaterDensityBottom':lineNumberOfWaterDensityBottom
+               }
 
 
             #print("lineNumber",lineNumber)
             #print("lenText",lenText)
 
-            if lineNumber == lenText:
+            if lineNumberFromStationBegin == lenText:
 
 
                 print(d)
