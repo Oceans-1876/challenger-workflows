@@ -4,10 +4,14 @@
 
 > Requires python > 3.8
 
-### Process PDF data
+### Setup
+
+Install the requirements in `requirements.txt`
+
+#### Process PDF data
 
 See [`./data/README.md`](./data/README.md)
 
-### Parse extracted text
+#### Parse extracted text
 
 See [`./parser/README.md`](./parser/README.md)

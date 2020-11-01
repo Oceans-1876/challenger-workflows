@@ -3,6 +3,7 @@ resources/
 venv/
 
 *.pdf
+*.txt
 *.py[cod]
 *.log
 *.png

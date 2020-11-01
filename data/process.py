@@ -29,5 +29,9 @@ def process_pdf(pdf_file: Path, output_path: Path):
 
 
 if __name__ == "__main__":
-    process_pdf(Path("./inputs/Challenger Summary part 1.pdf"), Path("./outputs/part1/"))
-    process_pdf(Path("./inputs/Challenger Summary part 2.pdf"), Path("./outputs/part2/"))
+    process_pdf(
+        Path("./inputs/Challenger Summary part 1.pdf"), Path("./outputs/part1/")
+    )
+    process_pdf(
+        Path("./inputs/Challenger Summary part 2.pdf"), Path("./outputs/part2/")
+    )
