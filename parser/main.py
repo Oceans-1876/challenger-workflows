@@ -1,7 +1,6 @@
-import json
+import io
 import logging
 import re
-import subprocess
 from json import JSONDecodeError
 from pathlib import Path
 from typing import Dict
@@ -11,6 +10,7 @@ from typing import TypedDict
 from typing import Union
 
 import pandas as pd
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,10 @@ def main():
         df_parsed = parse_species_names_gnrd(station_text_dict)
         df_parsed.to_csv(
             file_output_path / "parsed_species_names_with_station_and_offset.csv"
+        )
+
+        verify_species_names_gni(df_parsed).to_csv(
+            file_output_path / "verified_species_names.csv"
         )
 
     # merge files from part 1 and part 2 summaries
@@ -142,35 +146,27 @@ def split_text_into_stations(filename: str) -> (pd.DataFrame, Dict[str, List[str
 
 
 def parse_species_names_gnrd(station_text_dict: Dict[str, List[str]]) -> pd.DataFrame:
+    """ Request http://gnrd.globalnames.org/api """
+
     columns_list = ["station", "species_name", "offset_start", "offset_end"]
     df = pd.DataFrame(columns=columns_list)
 
-    for station_name, station_text in list(station_text_dict.items())[:2]:
-        gnfinder = subprocess.run(
-            ["gnfinder", "find", "-c", "-l", "eng"],
-            stdout=subprocess.PIPE,
-            input="\n".join(station_text),
-            encoding="utf-8",
-        )
+    for station_name, station_text in list(station_text_dict.items()):
+        url = "http://gnrd.globalnames.org/name_finder.json"
+
+        file_from_string = io.StringIO("\n".join(station_text))
+
+        files = {"file": (station_name, file_from_string)}
+        r = requests.post(url, files=files)  # get names with offsetStart, offsetEnd
 
         try:
-            for name_dict in json.loads(gnfinder.stdout)["names"]:
-                best_results = name_dict["verification"]["bestResult"]
-
+            for name_dict in r.json()["names"]:
                 df = df.append(
                     {
                         "station": station_name,
-                        "species_name": name_dict["name"],
-                        "offset_start": name_dict["start"],
-                        "offset_end": name_dict["end"],
-                        "canonical_form": best_results.get("matchedCanonicalFull"),
-                        "data_source_id": best_results.get("dataSourceId"),
-                        "data_source_title": best_results.get("dataSourceTitle"),
-                        "taxonId": best_results.get("taxonId"),
-                        "classification_path": best_results.get("classificationPath"),
-                        "classification_path_rank": best_results.get(
-                            "classificationRank"
-                        ),
+                        "species_name": name_dict["scientificName"],
+                        "offset_start": name_dict["offsetStart"],
+                        "offset_end": name_dict["offsetEnd"],
                     },
                     ignore_index=True,
                 )
@@ -181,109 +177,109 @@ def parse_species_names_gnrd(station_text_dict: Dict[str, List[str]]) -> pd.Data
     return df
 
 
-# def verify_species_names_gni(df: pd.DataFrame) -> pd.DataFrame:
-#     """ Request http://resolver.globalnames.org/name_resolvers.json """
-#
-#     is_known_name_list = []
-#     data_source_list = []
-#     gni_uuid_list = []
-#     classification_path_list = []
-#     classification_path_rank_list = []
-#     vernaculars_list = []
-#     canonical_form_list = []
-#
-#     for _, row in df.iterrows():
-#         name = row.species_name
-#
-#         query_params = [
-#             f"names={name.replace(' ', '+')}",
-#             "with_context=true",
-#             "header_only=false",
-#             "with_canonical_ranks=true",
-#             "with_vernaculars=true",
-#             "best_match_only=true",
-#             "resolve_once=false",  # first match ==> much faster
-#         ]
-#         url_full = f"http://resolver.globalnames.org/name_resolvers.json?{'&'.join(query_params)}"
-#
-#         logger.info(f"Checking {url_full}...")
-#
-#         try:
-#             r = requests.get(url_full)
-#
-#             # r.json() is what is returned by the server
-#             logger.info(f"Verified {name}.")
-#             for name_dict in r.json()["data"]:
-#                 try:
-#                     is_known_name_list.append(name_dict["is_known_name"])
-#                 except Exception as e:
-#                     logger.warning(e)
-#                     is_known_name_list.append("")
-#
-#                 try:
-#                     data_source_list.append(
-#                         name_dict["results"][0]["data_source_title"]
-#                     )
-#                 except Exception as e:
-#                     logger.warning(e)
-#                     data_source_list.append("")
-#
-#                 try:
-#                     gni_uuid_list.append(name_dict["results"][0]["gni_uuid"])
-#                 except Exception as e:
-#                     logger.warning(e)
-#                     gni_uuid_list.append("")
-#
-#                 try:
-#                     canonical_form_list.append(
-#                         name_dict["results"][0]["canonical_form"]
-#                     )
-#                 except Exception as e:
-#                     logger.warning(e)
-#                     canonical_form_list.append("")
-#
-#                 try:
-#                     classification_path_list.append(
-#                         name_dict["results"][0]["classification_path"]
-#                     )
-#                 except Exception as e:
-#                     logger.warning(e)
-#                     classification_path_list.append("")
-#
-#                 try:
-#                     classification_path_rank_list.append(
-#                         name_dict["results"][0]["classification_path_ranks"]
-#                     )
-#                 except Exception as e:
-#                     logger.warning(e)
-#                     classification_path_rank_list.append("")
-#
-#                 try:
-#                     vernaculars_list.append(
-#                         name_dict["results"][0]["vernaculars"][0]["name"]
-#                     )
-#                 except Exception as e:
-#                     logger.warning(e)
-#                     vernaculars_list.append("")
-#         except Exception as e:
-#             logger.error(e)
-#             is_known_name_list.append("")
-#             data_source_list.append("")
-#             gni_uuid_list.append("")
-#             canonical_form_list.append("")
-#             classification_path_list.append("")
-#             classification_path_rank_list.append("")
-#             vernaculars_list.append("")
-#
-#     df["vernacular"] = vernaculars_list
-#     df["canonical_form"] = canonical_form_list
-#     df["verified"] = is_known_name_list
-#     df["data_source"] = data_source_list
-#     df["gni_uuid"] = gni_uuid_list
-#     df["classification_path"] = classification_path_list
-#     df["classification_path_rank"] = classification_path_rank_list
-#
-#     return df
+def verify_species_names_gni(df: pd.DataFrame) -> pd.DataFrame:
+    """ Request http://resolver.globalnames.org/name_resolvers.json """
+
+    is_known_name_list = []
+    data_source_list = []
+    gni_uuid_list = []
+    classification_path_list = []
+    classification_path_rank_list = []
+    vernaculars_list = []
+    canonical_form_list = []
+
+    for _, row in df.iterrows():
+        name = row.species_name
+
+        query_params = [
+            f"names={name.replace(' ', '+')}",
+            "with_context=true",
+            "header_only=false",
+            "with_canonical_ranks=true",
+            "with_vernaculars=true",
+            "best_match_only=true",
+            "resolve_once=false",  # first match ==> much faster
+        ]
+        url_full = f"http://resolver.globalnames.org/name_resolvers.json?{'&'.join(query_params)}"
+
+        logger.info(f"Checking {url_full}...")
+
+        try:
+            r = requests.get(url_full)
+
+            # r.json() is what is returned by the server
+            logger.info(f"Verified {name}.")
+            for name_dict in r.json()["data"]:
+                try:
+                    is_known_name_list.append(name_dict["is_known_name"])
+                except Exception as e:
+                    logger.warning(e)
+                    is_known_name_list.append("")
+
+                try:
+                    data_source_list.append(
+                        name_dict["results"][0]["data_source_title"]
+                    )
+                except Exception as e:
+                    logger.warning(e)
+                    data_source_list.append("")
+
+                try:
+                    gni_uuid_list.append(name_dict["results"][0]["gni_uuid"])
+                except Exception as e:
+                    logger.warning(e)
+                    gni_uuid_list.append("")
+
+                try:
+                    canonical_form_list.append(
+                        name_dict["results"][0]["canonical_form"]
+                    )
+                except Exception as e:
+                    logger.warning(e)
+                    canonical_form_list.append("")
+
+                try:
+                    classification_path_list.append(
+                        name_dict["results"][0]["classification_path"]
+                    )
+                except Exception as e:
+                    logger.warning(e)
+                    classification_path_list.append("")
+
+                try:
+                    classification_path_rank_list.append(
+                        name_dict["results"][0]["classification_path_ranks"]
+                    )
+                except Exception as e:
+                    logger.warning(e)
+                    classification_path_rank_list.append("")
+
+                try:
+                    vernaculars_list.append(
+                        name_dict["results"][0]["vernaculars"][0]["name"]
+                    )
+                except Exception as e:
+                    logger.warning(e)
+                    vernaculars_list.append("")
+        except Exception as e:
+            logger.error(e)
+            is_known_name_list.append("")
+            data_source_list.append("")
+            gni_uuid_list.append("")
+            canonical_form_list.append("")
+            classification_path_list.append("")
+            classification_path_rank_list.append("")
+            vernaculars_list.append("")
+
+    df["vernacular"] = vernaculars_list
+    df["canonical_form"] = canonical_form_list
+    df["verified"] = is_known_name_list
+    df["data_source"] = data_source_list
+    df["gni_uuid"] = gni_uuid_list
+    df["classification_path"] = classification_path_list
+    df["classification_path_rank"] = classification_path_rank_list
+
+    return df
 
 
 def dms_to_lat_long(degree, minute, second) -> float:
