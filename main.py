@@ -4,10 +4,11 @@ import re
 import subprocess
 from json import JSONDecodeError
 from pathlib import Path
+from typing import Dict
 from typing import List
+from typing import Optional
 from typing import Tuple
 from typing import TypedDict
-from typing import Union
 
 import click
 import pandas as pd
@@ -20,148 +21,126 @@ input_path = Path("inputs")
 output_path = Path("outputs")
 
 
+ErrorType = Dict[str, List[str]]
+
+
 class Coordinates(TypedDict):
-    lat_degree: str
-    lat_minute: str
-    lat_second: str
-    lat_coord: float
-    long_degree: str
-    long_minute: str
-    long_second: str
-    long_coord: float
+    lat_degree: Optional[int]
+    lat_minute: Optional[int]
+    lat_second: Optional[int]
+    lat_coord: Optional[float]
+    long_degree: Optional[int]
+    long_minute: Optional[int]
+    long_second: Optional[int]
+    long_coord: Optional[float]
 
 
 class AirTemperature(TypedDict):
-    air_temp_noon: str
-    air_temp_noon_degree: str
-    air_temp_daily_mean: str
-    air_temp_daily_mean_degree: str
+    air_temp_noon: Optional[str]
+    air_temp_daily_mean: Optional[str]
+    air_temp_noon_degree: Optional[float]
+    air_temp_daily_mean_degree: Optional[float]
 
 
 class WaterTemperature(TypedDict):
-    water_temp_surface: str
-    water_temp_surface_degree: str
-    water_temp_bottom: str
-    water_temp_bottom_degree: str
+    water_temp_surface: Optional[str]
+    water_temp_bottom: Optional[str]
+    water_temp_surface_degree: Optional[float]
+    water_temp_bottom_degree: Optional[float]
 
 
 class Density(TypedDict):
-    water_density_surface: str
-    water_density_surface_number: str
-    water_density_bottom: str
-    water_density_bottom_number: str
-
-
-EnvironmentAttributes = Union[Coordinates, AirTemperature, WaterTemperature, Density]
+    water_density_surface: Optional[str]
+    water_density_bottom: Optional[str]
+    water_density_surface_number: Optional[float]
+    water_density_bottom_number: Optional[float]
 
 
 class Species(TypedDict):
-    species_name: str
-    offset_start: int
-    offset_end: int
-    canonical_form: str
-    data_source_id: str
-    data_source_title: str
-    taxonId: str
-    classification_path: str
-    classification_path_rank: str
-
-
-def get_new_species() -> Species:
-    return Species(
-        species_name="",
-        offset_start=0,
-        offset_end=0,
-        canonical_form="",
-        data_source_id="",
-        data_source_title="",
-        taxonId="",
-        classification_path="",
-        classification_path_rank="",
-    )
+    species_name: Optional[str]
+    offset_start: Optional[int]
+    offset_end: Optional[int]
+    canonical_form: Optional[str]
+    data_source_id: Optional[str]
+    data_source_title: Optional[str]
+    taxonId: Optional[str]
+    classification_path: List[str]
+    classification_path_rank: List[str]
 
 
 class Station(
-    TypedDict, Coordinates, AirTemperature, WaterTemperature, Density, total=False
+    TypedDict, Coordinates, AirTemperature, WaterTemperature, Density, Species
 ):
-    station: str
-    start_page: int
-    start_page_line: int
-    end_page: int
-    end_page_line: int
+    station: Optional[str]
+    part: Optional[int]
+    start_page: Optional[int]
+    start_page_line: Optional[int]
+    end_page: Optional[int]
+    end_page_line: Optional[int]
     raw_text: List[str]
-    date: str
-    raw_dms_coords: str
-    line_number_of_date: int
-    line_number_of_lat_long: int
-    line_number_air_temp_noon: int
-    line_number_of_air_temp_daily_mean: int
-    line_number_of_water_temp_surface: int
-    line_number_of_water_temp_bottom: int
-    line_number_of_water_density_surface: int
-    line_number_of_water_density_bottom: int
+    date: Optional[str]
+    raw_dms_coords: Optional[str]
+    line_number_of_date: Optional[int]
+    line_number_of_lat_long: Optional[int]
+    line_number_air_temp_noon: Optional[int]
+    line_number_of_air_temp_daily_mean: Optional[int]
+    line_number_of_water_temp_surface: Optional[int]
+    line_number_of_water_temp_bottom: Optional[int]
+    line_number_of_water_density_surface: Optional[int]
+    line_number_of_water_density_bottom: Optional[int]
+    errors: ErrorType
 
 
-def get_new_station() -> Station:
+def get_new_station(part: int) -> Station:
     return Station(
-        station="",
-        start_page=0,
-        start_page_line=0,
-        end_page=0,
-        end_page_line=0,
+        station=None,
+        part=part,
+        start_page=None,
+        start_page_line=None,
+        end_page=None,
+        end_page_line=None,
         raw_text=[],
-        date="",
-        raw_dms_coords="",
-        lat_degree="",
-        lat_minute="",
-        lat_second="",
-        lat_coord=0.0,
-        long_degree="",
-        long_minute="",
-        long_second="",
-        long_coord=0.0,
-        air_temp_noon="",
-        air_temp_daily_mean="",
-        air_temp_daily_mean_degree="",
-        air_temp_noon_degree="",
-        water_temp_surface="",
-        water_temp_bottom_degree="",
-        water_temp_surface_degree="",
-        water_temp_bottom="",
-        water_density_bottom="",
-        water_density_bottom_number="",
-        water_density_surface="",
-        water_density_surface_number="",
-        line_number_of_date=0,
-        line_number_of_lat_long=0,
-        line_number_air_temp_noon=0,
-        line_number_of_air_temp_daily_mean=0,
-        line_number_of_water_temp_surface=0,
-        line_number_of_water_temp_bottom=0,
-        line_number_of_water_density_bottom=0,
-        line_number_of_water_density_surface=0,
+        date=None,
+        raw_dms_coords=None,
+        lat_degree=None,
+        lat_minute=None,
+        lat_second=None,
+        lat_coord=None,
+        long_degree=None,
+        long_minute=None,
+        long_second=None,
+        long_coord=None,
+        air_temp_noon=None,
+        air_temp_daily_mean=None,
+        air_temp_daily_mean_degree=None,
+        air_temp_noon_degree=None,
+        water_temp_surface=None,
+        water_temp_bottom_degree=None,
+        water_temp_surface_degree=None,
+        water_temp_bottom=None,
+        water_density_bottom=None,
+        water_density_surface=None,
+        water_density_bottom_number=None,
+        water_density_surface_number=None,
+        line_number_of_date=None,
+        line_number_of_lat_long=None,
+        line_number_air_temp_noon=None,
+        line_number_of_air_temp_daily_mean=None,
+        line_number_of_water_temp_surface=None,
+        line_number_of_water_temp_bottom=None,
+        line_number_of_water_density_bottom=None,
+        line_number_of_water_density_surface=None,
+        species_name=None,
+        offset_start=None,
+        offset_end=None,
+        canonical_form=None,
+        data_source_id=None,
+        data_source_title=None,
+        taxonId=None,
+        classification_path=[],
+        classification_path_rank=[],
+        errors={},
     )
-
-
-def parse_data():
-    """ Run info extraction techniques on file """
-    parts = ["part1", "part2"]
-
-    for part in parts:
-        texts_path = output_path / part / "pages" / "texts"
-        if not texts_path.exists():
-            logger.warning(
-                f"Could not find the text files for {part}. "
-                f"You need to include the `--pdf` flag to convert the PDF files first."
-            )
-            return
-
-        logger.info(f"Processing {part} stations...")
-        stations = get_stations(texts_path)
-        stations.to_csv(output_path / part / "stations" / "000_stations.csv")
-
-    # merge files from part 1 and part 2 summaries
-    merge_files(parts)
 
 
 def process_pdf():
@@ -190,22 +169,65 @@ def process_pdf():
             logger.info(f"Saved {filename}.txt")
 
 
-def merge_files(parts):
+def parse_data():
+    """ Run info extraction techniques on file """
+    parts = [1, 2]
+
+    for part_number in parts:
+        texts_path = output_path / f"part{part_number}" / "pages" / "texts"
+        if not texts_path.exists():
+            logger.warning(
+                f"Could not find the text files for part {part_number}. "
+                f"You need to include the `--pdf` flag to convert the PDF files first."
+            )
+            return
+
+        logger.info(f"Processing part {part_number} stations...")
+        stations = get_stations(part_number, texts_path)
+        stations.to_csv(
+            output_path / f"part{part_number}" / "stations" / "000_stations.csv"
+        )
+
+    # merge files from part 1 and part 2 summaries
+    merge_files(parts)
+
+
+def parse_stations(stations_str: str):
+    parts = {"1": [], "2": []}
+    for station in stations_str.split(","):
+        (part_number, station_idx) = station.split("/")
+        parts[part_number].append(f"{int(station_idx):03}")
+
+    for part_number, stations in parts.items():
+        for f in (output_path / f"part{part_number}" / "stations").iterdir():
+            if f.name[:3] in stations:
+                with open(f, "r") as station_file:
+                    station_json: Station = json.loads(station_file.read())
+                station_json["errors"] = {}
+                get_environment_info(station_json)
+                parse_species_names_gnrd(station_json)
+                with open(f, "w") as station_file:
+                    station_file.write(json.dumps(station_json, indent=2))
+
+
+def merge_files(parts: List[int]):
     concatenated_output = []
-    for part in parts:
+    for part_number in parts:
         concatenated_output.append(
-            pd.read_csv(output_path / part / "stations" / "000_stations.csv")
+            pd.read_csv(
+                output_path / f"part{part_number}" / "stations" / "000_stations.csv"
+            )
         )
     pd.concat(concatenated_output).reset_index().to_csv(output_path / "stations.csv")
 
 
-def get_stations(texts_path: Path) -> pd.DataFrame:
+def get_stations(part_number: int, texts_path: Path) -> pd.DataFrame:
     """ Break summary texts into sections for each station, put in dictionary"""
     stations_output_path = texts_path.parent.parent / "stations"
     stations_output_path.mkdir(exist_ok=True)
 
     stations = []
-    previous_station = get_new_station()
+    previous_station = get_new_station(part_number)
 
     station_index = -1
     station_text = []
@@ -218,8 +240,8 @@ def get_stations(texts_path: Path) -> pd.DataFrame:
         previous_station["end_page"] = int(text_file.stem[4:])
         previous_station["end_page_line"] = i
         previous_station["raw_text"] = station_text
-        previous_station.update(get_environment_info(station_text))
-        previous_station.update(parse_species_names_gnrd(station_text))
+        get_environment_info(previous_station)
+        parse_species_names_gnrd(previous_station)
         stations.append(previous_station)
         with open(
             stations_output_path
@@ -252,6 +274,7 @@ def get_stations(texts_path: Path) -> pd.DataFrame:
 
                 if station_index > 0:
                     add_station()
+                    previous_station = get_new_station(part_number)
                     station_text = []
                 previous_station["station"] = station
                 previous_station["start_page"] = int(text_file.stem[4:])
@@ -265,15 +288,13 @@ def get_stations(texts_path: Path) -> pd.DataFrame:
     return pd.DataFrame(stations)
 
 
-def parse_species_names_gnrd(station_text: List[str]):
+def parse_species_names_gnrd(station: Station):
     gnfinder = subprocess.run(
         ["gnfinder", "find", "-c", "-l", "eng"],
         stdout=subprocess.PIPE,
-        input="\n".join(station_text),
+        input="\n".join(station["raw_text"]),
         encoding="utf-8",
     )
-
-    species = get_new_species()
 
     try:
         names = json.loads(gnfinder.stdout).get("names")
@@ -281,7 +302,7 @@ def parse_species_names_gnrd(station_text: List[str]):
             for name_dict in names:
                 best_results = name_dict["verification"]["bestResult"]
 
-                species.update(
+                station.update(
                     {
                         "species_name": name_dict["name"],
                         "offset_start": name_dict["start"],
@@ -290,17 +311,17 @@ def parse_species_names_gnrd(station_text: List[str]):
                         "data_source_id": best_results.get("dataSourceId"),
                         "data_source_title": best_results.get("dataSourceTitle"),
                         "taxonId": best_results.get("taxonId"),
-                        "classification_path": best_results.get("classificationPath"),
+                        "classification_path": best_results.get(
+                            "classificationPath", ""
+                        ).split("|"),
                         "classification_path_rank": best_results.get(
-                            "classificationRank"
-                        ),
+                            "classificationRank", ""
+                        ).split("|"),
                     }
                 )
     except JSONDecodeError:
         logger.error("No json was returned by the server - skipping station!")
         pass
-
-    return species
 
 
 # def verify_species_names_gni(df: pd.DataFrame) -> pd.DataFrame:
@@ -408,99 +429,139 @@ def parse_species_names_gnrd(station_text: List[str]):
 #     return df
 
 
-def dms_to_lat_long(degree, minute, second) -> float:
-    if second == "" and minute == "":
-        return float(degree)
-    elif second == "" and minute != "":
-        return float(degree) + float(minute) / 60
+def dms_to_lat_long(degree: float, minute: float, second: float) -> float:
+    if not second and not minute:
+        return degree
+    elif not second and minute:
+        return degree + minute / 60
     else:
-        return float(degree) + float(minute) / 60 + float(second) / 3600
+        return degree + minute / 60 + second / 3600
 
 
-def parse_coordinate(coordinate: str) -> Tuple[float, str, str, str]:
+def parse_coordinate(
+    coordinate: str,
+) -> Tuple[
+    Optional[float], Optional[float], Optional[float], Optional[float], List[str]
+]:
+    errors = []
+
     try:
         degree = coordinate.split("°")[0]
-        degree = re.sub(r"[^0-9]", "", degree)
+        degree = float(re.sub(r"[^0-9]", "", degree).strip())
     except Exception as e:
-        logger.error(f"Parse coordinates: {e}")
-        degree = f"{e}, {coordinate}"
+        degree = None
+        errors.append(
+            f"Parse coordinates degree (line: {e.__traceback__.tb_lineno}: {e})"
+        )
 
     if "’" in coordinate.split("°")[1]:
         try:
-            minute = coordinate.split("°")[1].split("’")[0]
+            minute = float(coordinate.split("°")[1].split("’")[0].strip())
         except Exception as e:
-            logger.error(f"Parse coordinates: {e}")
-            minute = ""
+            minute = None
+            errors.append(
+                f"Parse coordinates minute (line: {e.__traceback__.tb_lineno}: {e})"
+            )
 
         try:  # none of these so far, but just in case
             second = coordinate.split("°")[1].split("’")[1]
-            second = re.sub("[^0-9]", "", second)
+            second = float(re.sub("[^0-9]", "", second).strip())
         except Exception as e:
-            logger.error(f"Parse coordinates: {e}")
-            second = ""
+            second = None
+            errors.append(
+                f"Parse coordinates second (line: {e.__traceback__.tb_lineno}: {e})"
+            )
     elif "'" in coordinate.split("°")[1]:
         try:
-            minute = coordinate.split("°")[1].split("'")[0]
+            minute = float(coordinate.split("°")[1].split("'")[0].strip())
         except Exception as e:
-            logger.error(f"Parse coordinates: {e}")
-            minute = ""
+            minute = None
+            errors.append(
+                f"Parse coordinates minute (line: {e.__traceback__.tb_lineno}: {e})"
+            )
         try:  # none of these so far, but just in case
             second = coordinate.split("°")[1].split("'")[1]
-            second = re.sub("[^0-9]", "", second)
+            second = float(re.sub("[^0-9]", "", second).strip())
         except Exception as e:
-            logger.error(f"Parse coordinates: {e}")
-            second = ""
+            second = None
+            errors.append(
+                f"Parse coordinates second (line: {e.__traceback__.tb_lineno}: {e})"
+            )
     else:
         logger.warning(f"Could not find coords: {coordinate}")
-        minute = ""
-        second = ""
+        minute = None
+        second = None
 
-    return dms_to_lat_long(degree, minute, second), degree, minute, second
+    lat_long = dms_to_lat_long(degree, minute, second) if degree else None
+
+    return (
+        lat_long,
+        degree,
+        minute,
+        second,
+        errors if not lat_long else [],
+    )
 
 
-def parse_coordinates(line: str) -> Coordinates:
+def parse_coordinates(line: str) -> Tuple[Coordinates, ErrorType]:
+    errors = {}
+
     dms_coords = line.split(";")[1]
 
     lat, long = dms_coords.split(",")
 
-    (lat_coord, lat_degree, lat_minute, lat_second,) = parse_coordinate(lat)
-    (long_coord, long_degree, long_minute, long_second,) = parse_coordinate(long)
+    (lat_coord, lat_degree, lat_minute, lat_second, lat_errors) = parse_coordinate(lat)
+    (long_coord, long_degree, long_minute, long_second, long_errors) = parse_coordinate(
+        long
+    )
 
-    return {
-        "lat_degree": lat_degree,
-        "lat_minute": lat_minute,
-        "lat_second": lat_second,
-        "lat_coord": lat_coord,
-        "long_degree": long_degree,
-        "long_minute": long_minute,
-        "long_second": long_second,
-        "long_coord": long_coord,
-    }
+    if lat_errors:
+        errors["lat"] = lat_errors
+    if long_errors:
+        errors["long"] = long_errors
+
+    return (
+        {
+            "lat_degree": lat_degree,
+            "lat_minute": lat_minute,
+            "lat_second": lat_second,
+            "lat_coord": lat_coord,
+            "long_degree": long_degree,
+            "long_minute": long_minute,
+            "long_second": long_second,
+            "long_coord": long_coord,
+        },
+        errors,
+    )
 
 
-def parse_air_temperature(line: str) -> AirTemperature:
+def parse_air_temperature(line: str) -> Tuple[AirTemperature, ErrorType]:
     # fix for line 33964 of part 1 summary
     # 5.45 p.M. made sail and proceeded towards the Crozet Islands. Temperature of air at
+    errors = {}
+
     if ";" in line:
-        air_temp_noon = line.split(";")[0]
+        air_temp_noon = line.split(";")[0].strip()
         air_temp_noon_degree = air_temp_noon.split(",")[1]
         air_temp_noon_degree = re.sub("[^0-9]", "", air_temp_noon_degree)
-        air_temp_noon_degree = (
-            air_temp_noon_degree[0:-1] + "." + air_temp_noon_degree[-1]
+        air_temp_noon_degree = float(
+            (air_temp_noon_degree[0:-1] + "." + air_temp_noon_degree[-1]).strip()
         )
 
         try:
-            air_temp_daily_mean = line.split(";")[1]
+            air_temp_daily_mean = line.split(";")[1].strip()
             air_temp_daily_mean_degree = air_temp_daily_mean.split(",")[1]
             try:
                 air_temp_daily_mean_degree = air_temp_daily_mean_degree.split(".")[0]
                 air_temp_daily_mean_degree = re.sub(
                     "[^0-9]", "", air_temp_daily_mean_degree
                 )
-                air_temp_daily_mean_degree = (
-                    air_temp_daily_mean_degree[0:-1]
-                    + "."
-                    + air_temp_daily_mean_degree[-1]
+                air_temp_daily_mean_degree = float(
+                    (
+                        air_temp_daily_mean_degree[0:-1]
+                        + "."
+                        + air_temp_daily_mean_degree[-1]
+                    ).strip()
                 )
 
             except Exception as e:
@@ -508,62 +569,82 @@ def parse_air_temperature(line: str) -> AirTemperature:
                 air_temp_daily_mean_degree = re.sub(
                     "[^0-9]", "", air_temp_daily_mean_degree
                 )
-                air_temp_daily_mean_degree = (
-                    air_temp_daily_mean_degree[0:-1]
-                    + "."
-                    + air_temp_daily_mean_degree[-1]
+                air_temp_daily_mean_degree = float(
+                    (
+                        air_temp_daily_mean_degree[0:-1]
+                        + "."
+                        + air_temp_daily_mean_degree[-1]
+                    ).strip()
                 )
 
         except Exception as e:
             logger.error(f"Parse air temperature: {e}")
-            air_temp_daily_mean = ""
-            air_temp_daily_mean_degree = ""
+            air_temp_daily_mean = None
+            air_temp_daily_mean_degree = None
+            errors["air_temp_daily_mean"] = [str(e)]
     else:
-        air_temp_noon = line
+        air_temp_noon = line.strip()
         air_temp_noon_degree = air_temp_noon.split(",")[1]
         air_temp_noon_degree = re.sub("[^0-9]", "", air_temp_noon_degree)
-        air_temp_noon_degree = (
-            air_temp_noon_degree[0:-1] + "." + air_temp_noon_degree[-1]
+        air_temp_noon_degree = float(
+            (air_temp_noon_degree[0:-1] + "." + air_temp_noon_degree[-1]).strip()
         )
-        air_temp_daily_mean = ""
-        air_temp_daily_mean_degree = ""
+        air_temp_daily_mean = None
+        air_temp_daily_mean_degree = None
 
-    return {
-        "air_temp_noon": air_temp_noon,
-        "air_temp_noon_degree": air_temp_noon_degree,
-        "air_temp_daily_mean": air_temp_daily_mean,
-        "air_temp_daily_mean_degree": air_temp_daily_mean_degree,
-    }
+    return (
+        {
+            "air_temp_noon": air_temp_noon,
+            "air_temp_daily_mean": air_temp_daily_mean,
+            "air_temp_noon_degree": air_temp_noon_degree,
+            "air_temp_daily_mean_degree": air_temp_daily_mean_degree,
+        },
+        errors,
+    )
 
 
-def parse_water_temperature(line: str) -> WaterTemperature:
+def parse_water_temperature(line: str) -> Tuple[WaterTemperature, ErrorType]:
+    errors = {}
+
     if ";" in line:
-        water_temp_surface = line.split(";")[0]
+        water_temp_surface = line.split(";")[0].strip()
         try:
             water_temp_surface_degree = water_temp_surface.split(",")[1]
             water_temp_surface_degree = re.sub("[^0-9]", "", water_temp_surface_degree)
-            water_temp_surface_degree = (
-                water_temp_surface_degree[0:-1] + "." + water_temp_surface_degree[-1]
+            water_temp_surface_degree = float(
+                (
+                    water_temp_surface_degree[0:-1]
+                    + "."
+                    + water_temp_surface_degree[-1]
+                ).strip()
             )
 
         except Exception as e:
             logger.error(f"Parse water temperature: {e}")
             # currentWaterTempSurfaceDegree = ""
             water_temp_surface_degree = re.sub("[^0-9]", "", water_temp_surface)
-            water_temp_surface_degree = (
-                water_temp_surface_degree[0:-1] + "." + water_temp_surface_degree[-1]
+            water_temp_surface_degree = float(
+                (
+                    water_temp_surface_degree[0:-1]
+                    + "."
+                    + water_temp_surface_degree[-1]
+                ).strip()
             )
 
         try:
-            water_temp_bottom = line.split(";")[1]
+            water_temp_bottom = line.split(";")[1].strip()
             water_temp_bottom_degree = water_temp_bottom.split(",")[1]
             try:
                 water_temp_bottom_degree = water_temp_bottom_degree.split(".")[0]
                 water_temp_bottom_degree = re.sub(
                     "[^0-9]", "", water_temp_bottom_degree
                 )
-                water_temp_bottom_degree = (
-                    water_temp_bottom_degree[0:-1] + "." + water_temp_bottom_degree[-1]
+                water_temp_bottom_degree = float(
+                    (
+                        water_temp_bottom_degree[0:-1]
+                        + "."
+                        + water_temp_bottom_degree[-1]
+                    ).strip()
                 )
 
             except Exception as e:
@@ -572,27 +653,37 @@ def parse_water_temperature(line: str) -> WaterTemperature:
                 water_temp_bottom_degree = re.sub(
                     "[^0-9]", "", water_temp_bottom_degree
                 )
-                water_temp_bottom_degree = (
-                    water_temp_surface_degree[0:-1] + "." + water_temp_bottom_degree[-1]
+                water_temp_bottom_degree = float(
+                    (
+                        water_temp_surface_degree[0:-1]
+                        + "."
+                        + water_temp_bottom_degree[-1]
+                    ).strip()
                 )
 
         except Exception as e:
             logger.error(f"Parse water temperature: {e}")
-            water_temp_bottom = ""
+            water_temp_bottom = None
+            water_temp_bottom_degree = None
     else:
-        water_temp_surface = line
+        water_temp_surface = line.strip()
         try:
             water_temp_surface_degree = water_temp_surface.split(",")[1]
             water_temp_surface_degree = re.sub("[^0-9]", "", water_temp_surface_degree)
-            water_temp_surface_degree = (
-                water_temp_surface_degree[0:-1] + "." + water_temp_surface_degree[-1]
+            water_temp_surface_degree = float(
+                (
+                    water_temp_surface_degree[0:-1]
+                    + "."
+                    + water_temp_surface_degree[-1]
+                ).strip()
             )
         except Exception as e:
             logger.error(f"Parse water temperature: {e}")
-            water_temp_surface_degree = ""
+            water_temp_surface_degree = None
+            errors["water_temp_surface_degree"] = [str(e)]
 
-        water_temp_bottom = ""
-        water_temp_bottom_degree = ""
+        water_temp_bottom = None
+        water_temp_bottom_degree = None
         # need to fix if in the form:
         # Temperature of water :—
         #
@@ -606,34 +697,45 @@ def parse_water_temperature(line: str) -> WaterTemperature:
         # 700_—=C=»y . . , 40°7 Bottom, . ; . , 36°2
         # 800 __—,, . . , 40°2
 
-    return {
-        "water_temp_surface": water_temp_surface,
-        "water_temp_surface_degree": water_temp_surface_degree,
-        "water_temp_bottom": water_temp_bottom,
-        "water_temp_bottom_degree": water_temp_bottom_degree,
-    }
+    return (
+        {
+            "water_temp_surface": water_temp_surface,
+            "water_temp_surface_degree": water_temp_surface_degree,
+            "water_temp_bottom": water_temp_bottom,
+            "water_temp_bottom_degree": water_temp_bottom_degree,
+        },
+        errors,
+    )
 
 
-def parse_density(line: str) -> Density:
+def parse_density(line: str) -> Tuple[Density, ErrorType]:
+    errors = {}
+
     if ";" in line:
-        water_density_surface = line.split(";")[0]
+        water_density_surface = line.split(";")[0].strip()
         water_density_surface_number = water_density_surface.split(",")[1]
         water_density_surface_number = re.sub(
             "[^0-9]", "", water_density_surface_number
         )
-        water_density_surface_number = (
-            water_density_surface_number[0] + "." + water_density_surface_number[1:]
+        water_density_surface_number = float(
+            (
+                water_density_surface_number[0] + "." + water_density_surface_number[1:]
+            ).strip()
         )
 
-        water_density_bottom = line.split(";")[1]
-        water_density_bottom_number = water_density_bottom.split(",")[1]
+        water_density_bottom = line.split(";")[1].strip()
+        water_density_bottom_number = water_density_bottom.split(",")[1].strip()
         try:
             water_density_bottom_number = water_density_bottom_number.split(".")[0]
             water_density_bottom_number = re.sub(
                 "[^0-9]", "", water_density_bottom_number
             )
-            water_density_bottom_number = (
-                water_density_bottom_number[0] + "." + water_density_bottom_number[1:]
+            water_density_bottom_number = float(
+                (
+                    water_density_bottom_number[0]
+                    + "."
+                    + water_density_bottom_number[1:]
+                ).strip()
             )
 
         except Exception as e:
@@ -641,28 +743,37 @@ def parse_density(line: str) -> Density:
             water_density_bottom_number = re.sub(
                 "[^0-9]", "", water_density_bottom_number
             )
-            water_density_bottom_number = (
-                water_density_bottom_number[0] + "." + water_density_bottom_number[1:]
+            water_density_bottom_number = float(
+                (
+                    water_density_bottom_number[0]
+                    + "."
+                    + water_density_bottom_number[1:]
+                ).strip()
             )
 
     else:
         try:
-            water_density_surface = line
+            water_density_surface = line.strip()
             water_density_surface_number = water_density_surface.split(",")[1]
             water_density_surface_number = re.sub(
                 "[^0-9]", "", water_density_surface_number
             )
-            water_density_surface_number = (
-                water_density_surface_number[0] + "." + water_density_surface_number[1:]
+            water_density_surface_number = float(
+                (
+                    water_density_surface_number[0]
+                    + "."
+                    + water_density_surface_number[1:]
+                ).strip()
             )
 
         except Exception as e:
             logger.error(f"Parse density: {e}")
-            water_density_surface = ""
-            water_density_surface_number = ""
+            water_density_surface = None
+            water_density_surface_number = None
+            errors["water_density"] = [str(e)]
 
-        water_density_bottom = ""
-        water_density_bottom_number = ""
+        water_density_bottom = None
+        water_density_bottom_number = None
         # need to fix if in the form:
         # Density at 60° F. :—
 
@@ -671,62 +782,34 @@ def parse_density(line: str) -> Density:
         # 200 , =. . 1:02708 Bottom, . , ; 102607
         # 300 , ~~. , 1:02672
 
-    return {
-        "water_density_surface": water_density_surface,
-        "water_density_surface_number": water_density_surface_number,
-        "water_density_bottom": water_density_bottom,
-        "water_density_bottom_number": water_density_bottom_number,
-    }
+    return (
+        {
+            "water_density_surface": water_density_surface,
+            "water_density_surface_number": water_density_surface_number,
+            "water_density_bottom": water_density_bottom,
+            "water_density_bottom_number": water_density_bottom_number,
+        },
+        errors,
+    )
 
 
-def get_environment_info(station_text: List[str]) -> EnvironmentAttributes:
+def get_environment_info(station: Station):
     first_lat_long = True
     first_air_temp = True
     first_water_temp = True
     first_density = True
 
-    d: EnvironmentAttributes = {
-        "date": "",
-        "raw_dms_coords": "",
-        "lat_degree": "",
-        "lat_minute": "",
-        "lat_second": "",
-        "lat_coord": "",
-        "long_degree": "",
-        "long_minute": "",
-        "long_second": "",
-        "long_coord": "",
-        "air_temp_noon": "",
-        "air_temp_noon_degree": "",
-        "air_temp_daily_mean": "",
-        "air_temp_daily_mean_degree": "",
-        "water_temp_surface": "",
-        "water_temp_surface_degree": "",
-        "water_temp_bottom": "",
-        "water_temp_bottom_degree": "",
-        "water_density_surface": "",
-        "water_density_surface_number": "",
-        "water_density_bottom": "",
-        "water_density_bottom_number": "",
-        "line_number_of_date": "",
-        "line_number_of_lat_long": "",
-        "line_number_air_temp_noon": "",
-        "line_number_of_air_temp_daily_mean": "",
-        "line_number_of_water_temp_surface": "",
-        "line_number_of_water_temp_bottom": "",
-        "line_number_of_water_density_surface": "",
-        "line_number_of_water_density_bottom": "",
-    }
-
-    for idx, line in enumerate(station_text):
+    for idx, line in enumerate(station["raw_text"]):
         line_number = idx + 1
         if "lat." in line and "long." in line and first_lat_long:
             if ", 18" in line or ",18" in line:  # 18 for 1876, 1877...
                 try:
                     first_lat_long = False
 
-                    d.update(parse_coordinates(line))
-                    d.update(
+                    (coordinates, coordinates_errors) = parse_coordinates(line)
+                    station.update(coordinates)
+                    station["errors"].update(coordinates_errors)
+                    station.update(
                         {
                             "date": line.split(";")[0],
                             "raw_dms_coords": line.split(";")[1],
@@ -736,16 +819,21 @@ def get_environment_info(station_text: List[str]) -> EnvironmentAttributes:
                     )
                 except Exception as e:
                     logger.error(e)
-                    d.update({"date": f"{e}, {line}", "raw_dms_coords": f"{e}, {line}"})
+                    station.update({"date": None, "raw_dms_coords": None})
+                    station["errors"].update(
+                        {"date": [str(e)], "raw_dms_coords": [str(e)]}
+                    )
             else:
                 lat_index = line.find("lat")
-                d.update({"date": "", "raw_dms_coords": line[lat_index:]})
+                station.update({"date": None, "raw_dms_coords": line[lat_index:]})
 
         if "Temperature of air" in line and first_air_temp:
             first_air_temp = False
 
-            d.update(parse_air_temperature(line))
-            d.update(
+            (air_temperature, air_temperature_errors) = parse_air_temperature(line)
+            station.update(air_temperature)
+            station["errors"].update(air_temperature_errors)
+            station.update(
                 {
                     "line_number_air_temp_noon": line_number,
                     "line_number_of_air_temp_daily_mean": line_number,
@@ -755,8 +843,12 @@ def get_environment_info(station_text: List[str]) -> EnvironmentAttributes:
         if "Temperature of water" in line and first_water_temp:
             first_water_temp = False
 
-            d.update(parse_water_temperature(line))
-            d.update(
+            (water_temperature, water_temperature_errors) = parse_water_temperature(
+                line
+            )
+            station.update(water_temperature)
+            station["errors"].update(water_temperature_errors)
+            station.update(
                 {
                     "line_number_of_water_temp_surface": line_number,
                     "line_number_of_water_temp_bottom": line_number,
@@ -766,28 +858,43 @@ def get_environment_info(station_text: List[str]) -> EnvironmentAttributes:
         if "Density" in line and first_density:
             first_density = False
 
-            d.update(parse_density(line))
-            d.update(
+            (density, density_errors) = parse_density(line)
+            station.update(density)
+            station["errors"].update(density_errors)
+            station.update(
                 {
                     "line_number_of_water_density_surface": line_number,
                     "line_number_of_water_density_bottom": line_number,
                 }
             )
 
-    return d
-
 
 @click.command()
-@click.option("--pdf", is_flag=True, help="Convert PDFs to text")
-@click.option("--parse", is_flag=True, help="Parse data from converted text")
-def main(pdf, parse):
-    if not pdf and not parse:
+@click.option("--pdf", is_flag=True, help="Convert PDFs to text.")
+@click.option("--parse", is_flag=True, help="Parse data from converted text.")
+@click.option(
+    "--stations",
+    type=str,
+    help="""
+    Parse the given stations and updates their json and entries in CSVs.\n
+    Accepts a comma-separated list of stations in the following format:\n
+    <part_number>/<station_index>\n
+    `station_index` is the number at the beginning of a station json file in `outputs/<part_number>/stations/`.
+    You can leave out the leading zeros for index.\n
+    \b
+    Example: --stations 1/12,1/13,2/115 (parses stations 12 and 13 of part 1 and station 115 of part 2).
+    """,
+)
+def main(pdf: bool, parse: bool, stations: Optional[str]):
+    if not pdf and not parse and not stations:
         with click.Context(main) as ctx:
             click.echo(main.get_help(ctx))
     if pdf:
         process_pdf()
     if parse:
         parse_data()
+    if stations:
+        parse_stations(stations)
 
 
 if __name__ == "__main__":

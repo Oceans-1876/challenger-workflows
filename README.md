@@ -20,9 +20,23 @@
 Usage:  [OPTIONS]
 
 Options:
-  --pdf    Convert PDFs to text
-  --parse  Parse data from converted text
-  --help   Show this message and exit.
+  --pdf            Convert PDFs to text.
+  --parse          Parse data from converted text.
+  --stations TEXT  Parse the given stations and updates their json and entries
+                   in CSVs.
+
+                   Accepts a comma-separated list of stations in the following
+                   format:
+
+                   <part_number>/<station_index>
+
+                   `station_index` is the number at the beginning of a station
+                   json file in `outputs/<part_number>/stations/`. You can
+                   leave out the leading zeros for index.
+
+                   Example: --stations 1/12,1/13,2/115 (parses stations 12 and 13 of part 1 and station 115 of part 2).
+
+  --help           Show this message and exit.
 ```
 
 `--parse` flag must be used with or after calling `--pdf` flag. Converted PDFs are put in `images` and `texts` folder
