@@ -1,7 +1,10 @@
+clowder-data/
 outputs/
 resources/
+traefik/
 venv/
 
+.env
 *.pdf
 *.txt
 *.py[cod]
