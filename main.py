@@ -320,8 +320,7 @@ def parse_species_names_gnrd(station: Station):
                     }
                 )
     except JSONDecodeError:
-        logger.error("No json was returned by the server - skipping station!")
-        pass
+        station["errors"]["species"] = ["no species json"]
 
 
 # def verify_species_names_gni(df: pd.DataFrame) -> pd.DataFrame:
@@ -450,47 +449,37 @@ def parse_coordinate(
         degree = float(re.sub(r"[^0-9]", "", degree).strip())
     except Exception as e:
         degree = None
-        errors.append(
-            f"Parse coordinates degree (line: {e.__traceback__.tb_lineno}: {e})"
-        )
+        errors.append(f"degree (line: {e.__traceback__.tb_lineno}: {e})")
 
     if "’" in coordinate.split("°")[1]:
         try:
             minute = float(coordinate.split("°")[1].split("’")[0].strip())
         except Exception as e:
             minute = None
-            errors.append(
-                f"Parse coordinates minute (line: {e.__traceback__.tb_lineno}: {e})"
-            )
+            errors.append(f"minute (line: {e.__traceback__.tb_lineno}: {e})")
 
         try:  # none of these so far, but just in case
             second = coordinate.split("°")[1].split("’")[1]
             second = float(re.sub("[^0-9]", "", second).strip())
         except Exception as e:
             second = None
-            errors.append(
-                f"Parse coordinates second (line: {e.__traceback__.tb_lineno}: {e})"
-            )
+            errors.append(f"second (line: {e.__traceback__.tb_lineno}: {e})")
     elif "'" in coordinate.split("°")[1]:
         try:
             minute = float(coordinate.split("°")[1].split("'")[0].strip())
         except Exception as e:
             minute = None
-            errors.append(
-                f"Parse coordinates minute (line: {e.__traceback__.tb_lineno}: {e})"
-            )
+            errors.append(f"minute (line: {e.__traceback__.tb_lineno}: {e})")
         try:  # none of these so far, but just in case
             second = coordinate.split("°")[1].split("'")[1]
             second = float(re.sub("[^0-9]", "", second).strip())
         except Exception as e:
             second = None
-            errors.append(
-                f"Parse coordinates second (line: {e.__traceback__.tb_lineno}: {e})"
-            )
+            errors.append(f"second (line: {e.__traceback__.tb_lineno}: {e})")
     else:
-        logger.warning(f"Could not find coords: {coordinate}")
         minute = None
         second = None
+        errors.append(f"could not parse {coordinate}")
 
     lat_long = dms_to_lat_long(degree, minute, second) if degree else None
 
@@ -557,17 +546,18 @@ def parse_air_temperature(line: str) -> Tuple[AirTemperature, ErrorType]:
                 )
 
             except Exception as e:
-                logger.error(f"Parse air temperature: {e}")
                 air_temp_daily_mean = re.sub("[^0-9]", "", air_temp_daily_mean)
                 air_temp_daily_mean = float(
                     (air_temp_daily_mean[0:-1] + "." + air_temp_daily_mean[-1]).strip()
                 )
+                errors["air_temp_daily_mean"] = [
+                    f"line: {e.__traceback__.tb_lineno}: {e}"
+                ]
 
         except Exception as e:
-            logger.error(f"Parse air temperature: {e}")
             raw_air_temp_daily_mean = None
             air_temp_daily_mean = None
-            errors["raw_air_temp_daily_mean"] = [str(e)]
+            errors["air_temp_daily_mean"] = [f"line: {e.__traceback__.tb_lineno}: {e}"]
     else:
         raw_air_temp_noon = line.strip()
         air_temp_noon = raw_air_temp_noon.split(",")[1]
@@ -600,12 +590,12 @@ def parse_water_temperature(line: str) -> Tuple[WaterTemperature, ErrorType]:
             )
 
         except Exception as e:
-            logger.error(f"Parse water temperature: {e}")
             # currentWaterTempSurfaceDegree = ""
             water_temp_surface = re.sub("[^0-9]", "", raw_water_temp_surface)
             water_temp_surface = float(
                 (water_temp_surface[0:-1] + "." + water_temp_surface[-1]).strip()
             )
+            errors["water_temp_surface"] = [f"line: {e.__traceback__.tb_lineno}: {e}"]
 
         try:
             raw_water_temp_bottom = line.split(";")[1].strip()
@@ -618,17 +608,18 @@ def parse_water_temperature(line: str) -> Tuple[WaterTemperature, ErrorType]:
                 )
 
             except Exception as e:
-                logger.error(f"Parse water temperature: {e}")
                 water_temp_bottom = water_temp_bottom
                 water_temp_bottom = re.sub("[^0-9]", "", water_temp_bottom)
                 water_temp_bottom = float(
                     (water_temp_surface[0:-1] + "." + water_temp_bottom[-1]).strip()
                 )
-
+                errors["water_temp_bottom"] = [
+                    f"line: {e.__traceback__.tb_lineno}: {e}"
+                ]
         except Exception as e:
-            logger.error(f"Parse water temperature: {e}")
             raw_water_temp_bottom = None
             water_temp_bottom = None
+            errors["water_temp_bottom"] = [f"line: {e.__traceback__.tb_lineno}: {e}"]
     else:
         raw_water_temp_surface = line.strip()
         try:
@@ -638,9 +629,8 @@ def parse_water_temperature(line: str) -> Tuple[WaterTemperature, ErrorType]:
                 (water_temp_surface[0:-1] + "." + water_temp_surface[-1]).strip()
             )
         except Exception as e:
-            logger.error(f"Parse water temperature: {e}")
             water_temp_surface = None
-            errors["water_temp_surface"] = [str(e)]
+            errors["water_temp_surface"] = [f"line: {e.__traceback__.tb_lineno}: {e}"]
 
         raw_water_temp_bottom = None
         water_temp_bottom = None
@@ -689,12 +679,11 @@ def parse_density(line: str) -> Tuple[Density, ErrorType]:
             )
 
         except Exception as e:
-            logger.error(f"Parse density: {e}")
             water_density_bottom = re.sub("[^0-9]", "", water_density_bottom)
             water_density_bottom = float(
                 (water_density_bottom[0] + "." + water_density_bottom[1:]).strip()
             )
-
+            errors["water_density_bottom"] = [f"line: {e.__traceback__.tb_lineno}: {e}"]
     else:
         try:
             raw_water_density_surface = line.strip()
@@ -703,12 +692,12 @@ def parse_density(line: str) -> Tuple[Density, ErrorType]:
             water_density_surface = float(
                 (water_density_surface[0] + "." + water_density_surface[1:]).strip()
             )
-
         except Exception as e:
-            logger.error(f"Parse density: {e}")
             raw_water_density_surface = None
             water_density_surface = None
-            errors["water_density"] = [str(e)]
+            errors["water_density_surface"] = [
+                f"line: {e.__traceback__.tb_lineno}: {e}"
+            ]
 
         raw_water_density_bottom = None
         water_density_bottom = None
@@ -756,10 +745,14 @@ def get_environment_info(station: Station):
                         }
                     )
                 except Exception as e:
-                    logger.error(e)
                     station.update({"date": None, "raw_dms_coords": None})
                     station["errors"].update(
-                        {"date": [str(e)], "raw_dms_coords": [str(e)]}
+                        {
+                            "date": [f"line: {e.__traceback__.tb_lineno}: {e}"],
+                            "raw_dms_coords": [
+                                f"line: {e.__traceback__.tb_lineno}: {e}"
+                            ],
+                        }
                     )
             else:
                 lat_index = line.find("lat")
