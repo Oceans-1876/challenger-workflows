@@ -191,17 +191,12 @@ def process_pdf():
 
 
 def merge_files(parts):
-    for output in [
-        "stations.csv",
-        "parsed_species_names_with_station_and_offset.csv",
-        "environment_info.csv",
-    ]:
-        concatenated_output = []
-        for part in parts:
-            concatenated_output.append(
-                pd.read_csv(output_path / part / "stations" / f"000_{output}")
-            )
-        pd.concat(concatenated_output).reset_index().to_csv(output_path / output)
+    concatenated_output = []
+    for part in parts:
+        concatenated_output.append(
+            pd.read_csv(output_path / part / "stations" / "000_stations.csv")
+        )
+    pd.concat(concatenated_output).reset_index().to_csv(output_path / "stations.csv")
 
 
 def get_stations(texts_path: Path) -> pd.DataFrame:
