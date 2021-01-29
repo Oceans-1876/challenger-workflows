@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 input_path = Path("inputs")
 output_path = Path("outputs")
 
-
 ErrorType = Dict[str, List[str]]
 
 
@@ -160,7 +159,7 @@ def process_pdf():
         logger.info(f"Converted {pdf} to image")
 
         for idx, image in enumerate(images):
-            filename = f"{idx+1:04}"
+            filename = f"{idx + 1:04}"
             image.save(images_path / f"page{filename}.png")
             logger.info(f"Saved {filename}.png")
             text = pytesseract.image_to_string(image)
@@ -720,45 +719,49 @@ def parse_density(line: str) -> Tuple[Density, ErrorType]:
     )
 
 
+def parse_date(text: str) -> Tuple[Optional[str], Optional[str]]:
+    try:
+        return re.search(r"\w+ \d?\d, ?\d{4}", text).group(), None
+    except Exception as e:
+        return None, f"degree (line: {e.__traceback__.tb_lineno}: {e})"
+
+
 def get_environment_info(station: Station):
     first_lat_long = True
     first_air_temp = True
     first_water_temp = True
     first_density = True
 
+    (date, date_error) = parse_date(" ".join(station["raw_text"]))
+    if date:
+        station["date"] = date
+    if date_error:
+        station["errors"].update({"date": [date_error]})
+
     for idx, line in enumerate(station["raw_text"]):
         line_number = idx + 1
         if "lat." in line and "long." in line and first_lat_long:
-            if ", 18" in line or ",18" in line:  # 18 for 1876, 1877...
-                try:
-                    first_lat_long = False
+            try:
+                first_lat_long = False
 
-                    (coordinates, coordinates_errors) = parse_coordinates(line)
-                    station.update(coordinates)
-                    station["errors"].update(coordinates_errors)
-                    station.update(
-                        {
-                            "date": line.split(";")[0].strip(),
-                            "raw_dms_coords": line.split(";")[1].strip(),
-                            "line_number_of_date": line_number,
-                            "line_number_of_lat_long": line_number,
-                        }
-                    )
-                except Exception as e:
-                    station.update({"date": None, "raw_dms_coords": None})
-                    station["errors"].update(
-                        {
-                            "date": [f"line: {e.__traceback__.tb_lineno}: {e}"],
-                            "raw_dms_coords": [
-                                f"line: {e.__traceback__.tb_lineno}: {e}"
-                            ],
-                        }
-                    )
-            else:
-                lat_index = line.find("lat")
+                (coordinates, coordinates_errors) = parse_coordinates(line)
+                station.update(coordinates)
+                station["errors"].update(coordinates_errors)
                 station.update(
-                    {"date": None, "raw_dms_coords": line[lat_index:].strip()}
+                    {
+                        "raw_dms_coords": line.split(";")[1].strip(),
+                        "line_number_of_date": line_number,
+                        "line_number_of_lat_long": line_number,
+                    }
                 )
+            except Exception as e:
+                station.update({"raw_dms_coords": None})
+                station["errors"].update(
+                    {"raw_dms_coords": [f"line: {e.__traceback__.tb_lineno}: {e}"]}
+                )
+        else:
+            lat_index = line.find("lat")
+            station.update({"raw_dms_coords": line[lat_index:].strip()})
 
         if "Temperature of air" in line and first_air_temp:
             first_air_temp = False
@@ -802,7 +805,18 @@ def get_environment_info(station: Station):
             )
 
 
-@click.command()
+def get_stations_with_errors(errors: List[str]):
+    for part in ["1", "2"]:
+        for file_name in (output_path / f"part{part}" / "stations").iterdir():
+            if file_name.suffix == ".json":
+                with open(file_name, "r") as f:
+                    if any(
+                        [error in json.loads(f.read())["errors"] for error in errors]
+                    ):
+                        print(file_name)
+
+
+@click.command(no_args_is_help=True)
 @click.option("--pdf", is_flag=True, help="Convert PDFs to text.")
 @click.option("--parse", is_flag=True, help="Parse data from converted text.")
 @click.option(
@@ -818,16 +832,24 @@ def get_environment_info(station: Station):
     Example: --stations 1/12,1/13,2/115 (parses stations 12 and 13 of part 1 and station 115 of part 2).
     """,
 )
-def main(pdf: bool, parse: bool, stations: Optional[str]):
-    if not pdf and not parse and not stations:
-        with click.Context(main) as ctx:
-            click.echo(main.get_help(ctx))
+@click.option(
+    "--errors",
+    type=str,
+    help="""
+    print out stations with a given error.\n
+    Accepts a comma-separated list of error keys.\n
+    Example: --errors date,lat,long (find all stations with error for their date, lat, and longs fields).
+    """,
+)
+def main(pdf: bool, parse: bool, stations: Optional[str], errors: Optional[str]):
     if pdf:
         process_pdf()
     if parse:
         parse_data()
     if stations:
         parse_stations(stations)
+    if errors:
+        get_stations_with_errors(errors.split(","))
 
 
 if __name__ == "__main__":
