@@ -10,3 +10,4 @@ venv/
 *.py[cod]
 *.log
 *.png
+*.zip

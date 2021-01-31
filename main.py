@@ -13,9 +13,10 @@ from typing import TypedDict
 import click
 import pandas as pd
 import pdf2image
-import pytesseract
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(logging.StreamHandler())
 
 input_path = Path("inputs")
 output_path = Path("outputs")
@@ -159,13 +160,9 @@ def process_pdf():
         logger.info(f"Converted {pdf} to image")
 
         for idx, image in enumerate(images):
-            filename = f"{idx + 1:04}"
-            image.save(images_path / f"page{filename}.png")
+            filename = f"{idx:08}"
+            image.save(images_path / f"{filename}.png")
             logger.info(f"Saved {filename}.png")
-            text = pytesseract.image_to_string(image)
-            with open(texts_path / f"page{filename}.txt", "w", encoding="utf-8") as f:
-                f.write(text)
-            logger.info(f"Saved {filename}.txt")
 
 
 def parse_data():
@@ -175,10 +172,7 @@ def parse_data():
     for part_number in parts:
         texts_path = output_path / f"part{part_number}" / "pages" / "texts"
         if not texts_path.exists():
-            logger.warning(
-                f"Could not find the text files for part {part_number}. "
-                f"You need to include the `--pdf` flag to convert the PDF files first."
-            )
+            logger.warning(f"Could not find the text files for part {part_number}.")
             return
 
         logger.info(f"Processing part {part_number} stations...")
@@ -249,7 +243,7 @@ def get_stations(part_number: int, texts_path: Path) -> pd.DataFrame:
         ) as f:
             f.write(json.dumps(previous_station))
 
-    for text_file in texts_path.iterdir():
+    for text_file in texts_path.glob("*.txt"):
         with open(text_file, mode="r", encoding="utf-8") as fd:
             text = fd.read().strip()
 
@@ -817,8 +811,8 @@ def get_stations_with_errors(errors: List[str]):
 
 
 @click.command(no_args_is_help=True)
-@click.option("--pdf", is_flag=True, help="Convert PDFs to text.")
 @click.option("--parse", is_flag=True, help="Parse data from converted text.")
+@click.option("--pdf", is_flag=True, help="Split PDFs into images.")
 @click.option(
     "--stations",
     type=str,
