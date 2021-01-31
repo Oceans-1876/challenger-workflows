@@ -7,9 +7,13 @@
 ### Setup
 
 - Install the requirements in `requirements.txt`
-- Put the following PDF files in the `inputs` folder:
+- Put the following PDF files in the `inputs` folder (required for `--pdf` flag):
     - Challenger Summary part 1.pdf
     - Challenger Summary part 2.pdf
+- Download the summary report zip files for each part from the following urls and extract them in
+  `inputs/part<>/pages/texts`:
+    - Part 1: http://hdl.handle.net/2027/uc1.c2755812
+    - Part 2: http://hdl.handle.net/2027/uc1.c2755813
 
 
 ### How to use
@@ -17,11 +21,11 @@
 `parse.sh` accepts two flags as mentioned in its help:
 
 ```
-Usage:  [OPTIONS]
+Usage: [OPTIONS]
 
 Options:
-  --pdf            Convert PDFs to text.
   --parse          Parse data from converted text.
+  --pdf            Split PDFs into images.
   --stations TEXT  Parse the given stations and updates their json and entries
                    in CSVs.
 
@@ -36,9 +40,14 @@ Options:
 
                    Example: --stations 1/12,1/13,2/115 (parses stations 12 and 13 of part 1 and station 115 of part 2).
 
-  --help           Show this message and exit.
+  --errors TEXT    print out stations with a given error.
+
+                   Accepts a comma-separated list of error keys.
+
+                   Example: --errors date,lat,long (find all stations with
+                   error for their date, lat, and longs fields).
 ```
 
-`--parse` flag must be used with or after calling `--pdf` flag. Converted PDFs are put in `images` and `texts` folder
-for each part. Each page will be placed in its own text and image file.
+Split PDF images are put in `images` folder for each part.
+
 The parsed data for each station is saved in a json file under `stations` folder for each part.
