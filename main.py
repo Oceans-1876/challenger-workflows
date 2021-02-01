@@ -25,14 +25,8 @@ ErrorType = Dict[str, List[str]]
 
 
 class Coordinates(TypedDict):
-    lat_degree: Optional[int]
-    lat_minute: Optional[int]
-    lat_second: Optional[int]
-    lat_coord: Optional[float]
-    long_degree: Optional[int]
-    long_minute: Optional[int]
-    long_second: Optional[int]
-    long_coord: Optional[float]
+    lat: Optional[float]
+    long: Optional[float]
 
 
 class AirTemperature(TypedDict):
@@ -79,7 +73,7 @@ class Station(
     end_page_line: Optional[int]
     raw_text: List[str]
     date: Optional[str]
-    raw_dms_coords: Optional[str]
+    coords: Optional[str]
     line_number_of_date: Optional[int]
     line_number_of_lat_long: Optional[int]
     line_number_air_temp_noon: Optional[int]
@@ -101,15 +95,9 @@ def get_new_station(part: int) -> Station:
         end_page_line=None,
         raw_text=[],
         date=None,
-        raw_dms_coords=None,
-        lat_degree=None,
-        lat_minute=None,
-        lat_second=None,
-        lat_coord=None,
-        long_degree=None,
-        long_minute=None,
-        long_second=None,
-        long_coord=None,
+        coords=None,
+        lat=None,
+        long=None,
         raw_air_temp_noon=None,
         raw_air_temp_daily_mean=None,
         air_temp_daily_mean=None,
@@ -241,7 +229,7 @@ def get_stations(part_number: int, texts_path: Path) -> pd.DataFrame:
             / f"{station_index:03}_{previous_station['station']}.json",
             "w",
         ) as f:
-            f.write(json.dumps(previous_station))
+            f.write(json.dumps(previous_station, indent=2))
 
     for text_file in texts_path.glob("*.txt"):
         with open(text_file, mode="r", encoding="utf-8") as fd:
@@ -253,7 +241,6 @@ def get_stations(part_number: int, texts_path: Path) -> pd.DataFrame:
             line_cleaned = line.strip()
 
             # example: Station 16 (Sounding 60)
-            # for first station through station before last station
             if "(Sounding" in line_cleaned:
                 station = (
                     line_cleaned[: line_cleaned.find("(Sounding")]
@@ -261,14 +248,16 @@ def get_stations(part_number: int, texts_path: Path) -> pd.DataFrame:
                     .encode("ascii", errors="ignore")
                     .decode("utf8")
                 )
-                logger.info(f"Found {station}!")
-                found_station = True
+                logger.info(f"Found {station}")
+                if not found_station:
+                    found_station = True
+                    station_text.append(line_cleaned)
                 station_index += 1
 
                 if station_index > 0:
                     add_station()
                     previous_station = get_new_station(part_number)
-                    station_text = []
+                    station_text = [line_cleaned]
                 previous_station["station"] = station
                 previous_station["start_page"] = int(text_file.stem[4:])
                 previous_station["start_page_line"] = i
@@ -430,91 +419,42 @@ def dms_to_lat_long(degree: float, minute: float, second: float) -> float:
         return degree + minute / 60 + second / 3600
 
 
-def parse_coordinate(
-    coordinate: str,
-) -> Tuple[
-    Optional[float], Optional[float], Optional[float], Optional[float], List[str]
-]:
-    errors = []
-
+def parse_coordinates(text: str) -> Tuple[Optional[Coordinates], Optional[str]]:
     try:
-        degree = coordinate.split("°")[0]
-        degree = float(re.sub(r"[^0-9]", "", degree).strip())
+        dms = re.search(
+            r"lat[^\d]*"
+            r"(?P<lat_degree>\d+(?:\.?\d+)?)[^\d]*"
+            r"(?P<lat_minute>\d+(?:\.?\d+)?)?[^\d]*"
+            r"(?P<lat_second>\d+(?:\.?\d+)?)?[^\d]*"
+            r"(?P<lat_direction>[NS]).*"
+            r"long[^\d]*"
+            r"(?P<long_degree>\d+(?:\.?\d+)?)[^\d]*"
+            r"(?P<long_minute>\d+(?:\.?\d+)?)?[^\d]*"
+            r"(?P<long_second>\d+(?:\.?\d+)?)?[^\d]*"
+            r"(?P<long_direction>[WE])",
+            text,
+        )
+        if dms:
+            matches = dms.groupdict()
+
+            lat_degree = float(matches["lat_degree"] or 0)
+            lat_minute = float(matches["lat_minute"] or 0)
+            lat_second = float(matches["lat_second"] or 0)
+            lat = lat_degree + lat_minute / 60 + lat_second / 3600
+            if matches["lat_direction"] == "S":
+                lat = -lat
+
+            long_degree = float(matches["long_degree"] or 0)
+            long_minute = float(matches["long_minute"] or 0)
+            long_second = float(matches["long_second"] or 0)
+            long = long_degree + long_minute / 60 + long_second / 3600
+            if matches["long_direction"] == "W":
+                long = -long
+
+            return {"coords": dms.group(), "lat": lat, "long": long}, None
+        return None, "Could not find coordinates"
     except Exception as e:
-        degree = None
-        errors.append(f"degree (line: {e.__traceback__.tb_lineno}: {e})")
-
-    if "’" in coordinate.split("°")[1]:
-        try:
-            minute = float(coordinate.split("°")[1].split("’")[0].strip())
-        except Exception as e:
-            minute = None
-            errors.append(f"minute (line: {e.__traceback__.tb_lineno}: {e})")
-
-        try:  # none of these so far, but just in case
-            second = coordinate.split("°")[1].split("’")[1]
-            second = float(re.sub("[^0-9]", "", second).strip())
-        except Exception as e:
-            second = None
-            errors.append(f"second (line: {e.__traceback__.tb_lineno}: {e})")
-    elif "'" in coordinate.split("°")[1]:
-        try:
-            minute = float(coordinate.split("°")[1].split("'")[0].strip())
-        except Exception as e:
-            minute = None
-            errors.append(f"minute (line: {e.__traceback__.tb_lineno}: {e})")
-        try:  # none of these so far, but just in case
-            second = coordinate.split("°")[1].split("'")[1]
-            second = float(re.sub("[^0-9]", "", second).strip())
-        except Exception as e:
-            second = None
-            errors.append(f"second (line: {e.__traceback__.tb_lineno}: {e})")
-    else:
-        minute = None
-        second = None
-        errors.append(f"could not parse {coordinate}")
-
-    lat_long = dms_to_lat_long(degree, minute, second) if degree else None
-
-    return (
-        lat_long,
-        degree,
-        minute,
-        second,
-        errors if not lat_long else [],
-    )
-
-
-def parse_coordinates(line: str) -> Tuple[Coordinates, ErrorType]:
-    errors = {}
-
-    dms_coords = line.split(";")[1]
-
-    lat, long = dms_coords.split(",")
-
-    (lat_coord, lat_degree, lat_minute, lat_second, lat_errors) = parse_coordinate(lat)
-    (long_coord, long_degree, long_minute, long_second, long_errors) = parse_coordinate(
-        long
-    )
-
-    if lat_errors:
-        errors["lat"] = lat_errors
-    if long_errors:
-        errors["long"] = long_errors
-
-    return (
-        {
-            "lat_degree": lat_degree,
-            "lat_minute": lat_minute,
-            "lat_second": lat_second,
-            "lat_coord": lat_coord,
-            "long_degree": long_degree,
-            "long_minute": long_minute,
-            "long_second": long_second,
-            "long_coord": long_coord,
-        },
-        errors,
-    )
+        return None, f"line: {e.__traceback__.tb_lineno}: {e}"
 
 
 def parse_air_temperature(line: str) -> Tuple[AirTemperature, ErrorType]:
@@ -717,45 +657,30 @@ def parse_date(text: str) -> Tuple[Optional[str], Optional[str]]:
     try:
         return re.search(r"\w+ \d?\d, ?\d{4}", text).group(), None
     except Exception as e:
-        return None, f"degree (line: {e.__traceback__.tb_lineno}: {e})"
+        return None, f"line: {e.__traceback__.tb_lineno}: {e}"
 
 
 def get_environment_info(station: Station):
-    first_lat_long = True
     first_air_temp = True
     first_water_temp = True
     first_density = True
 
-    (date, date_error) = parse_date(" ".join(station["raw_text"]))
+    text = "\n".join(station["raw_text"])
+
+    (date, date_error) = parse_date(text)
     if date:
         station["date"] = date
     if date_error:
         station["errors"].update({"date": [date_error]})
 
+    (coords, coords_errors) = parse_coordinates(text)
+    if coords:
+        station.update(coords)
+    if coords_errors:
+        station["coords"] = coords_errors
+
     for idx, line in enumerate(station["raw_text"]):
         line_number = idx + 1
-        if "lat." in line and "long." in line and first_lat_long:
-            try:
-                first_lat_long = False
-
-                (coordinates, coordinates_errors) = parse_coordinates(line)
-                station.update(coordinates)
-                station["errors"].update(coordinates_errors)
-                station.update(
-                    {
-                        "raw_dms_coords": line.split(";")[1].strip(),
-                        "line_number_of_date": line_number,
-                        "line_number_of_lat_long": line_number,
-                    }
-                )
-            except Exception as e:
-                station.update({"raw_dms_coords": None})
-                station["errors"].update(
-                    {"raw_dms_coords": [f"line: {e.__traceback__.tb_lineno}: {e}"]}
-                )
-        else:
-            lat_index = line.find("lat")
-            station.update({"raw_dms_coords": line[lat_index:].strip()})
 
         if "Temperature of air" in line and first_air_temp:
             first_air_temp = False
