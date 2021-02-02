@@ -725,14 +725,28 @@ def get_environment_info(station: Station):
 
 
 def get_stations_with_errors(errors: List[str]):
+    any_error = "any" in errors
     for part in ["1", "2"]:
         for file_name in (output_path / f"part{part}" / "stations").iterdir():
             if file_name.suffix == ".json":
                 with open(file_name, "r") as f:
-                    if any(
-                        [error in json.loads(f.read())["errors"] for error in errors]
+                    station_errors = json.loads(f.read())["errors"]
+                    if (any_error and station_errors) or any(
+                        [error in station_errors for error in errors]
                     ):
                         print(file_name)
+
+
+def get_stations_with_missing_attrs(keys: List[str]):
+    for part in ["1", "2"]:
+        for file_name in (output_path / f"part{part}" / "stations").iterdir():
+            if file_name.suffix == ".json":
+                with open(file_name, "r") as f:
+                    station = json.loads(f.read())
+                    for key in keys:
+                        if key in station and not station[key]:
+                            print(file_name)
+                            break
 
 
 @click.command(no_args_is_help=True)
@@ -755,12 +769,28 @@ def get_stations_with_errors(errors: List[str]):
     "--errors",
     type=str,
     help="""
-    print out stations with a given error.\n
+    Print out stations with a given error.\n
     Accepts a comma-separated list of error keys.\n
+    You can pass "any" to get all stations with any kind of error.\n
     Example: --errors date,lat,long (find all stations with error for their date, lat, and longs fields).
     """,
 )
-def main(pdf: bool, parse: bool, stations: Optional[str], errors: Optional[str]):
+@click.option(
+    "--missing",
+    type=str,
+    help="""
+    Print out stations with no value for the given attributes.\n
+    Accepts a comma-separated list of attributes.\n
+    Example: --missing air_temp_noon,date (find all stations with no value for air_temp_noon and date).
+    """,
+)
+def main(
+    pdf: bool,
+    parse: bool,
+    stations: Optional[str],
+    errors: Optional[str],
+    missing: Optional[str],
+):
     if pdf:
         process_pdf()
     if parse:
@@ -769,6 +799,8 @@ def main(pdf: bool, parse: bool, stations: Optional[str], errors: Optional[str])
         parse_stations(stations)
     if errors:
         get_stations_with_errors(errors.split(","))
+    if missing:
+        get_stations_with_missing_attrs(missing.split(","))
 
 
 if __name__ == "__main__":
