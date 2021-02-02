@@ -25,6 +25,7 @@ ErrorType = Dict[str, List[str]]
 
 
 class Coordinates(TypedDict):
+    raw_coordinates: Optional[str]
     lat: Optional[float]
     long: Optional[float]
 
@@ -37,15 +38,13 @@ class AirTemperature(TypedDict):
 
 
 class WaterTemperature(TypedDict):
-    raw_water_temp_surface: Optional[str]
-    raw_water_temp_bottom: Optional[str]
+    raw_water_temp: Optional[str]
     water_temp_surface: Optional[float]
     water_temp_bottom: Optional[float]
 
 
 class Density(TypedDict):
-    raw_water_density_surface: Optional[str]
-    raw_water_density_bottom: Optional[str]
+    raw_water_density: Optional[str]
     water_density_surface: Optional[float]
     water_density_bottom: Optional[float]
 
@@ -73,15 +72,6 @@ class Station(
     end_page_line: Optional[int]
     raw_text: List[str]
     date: Optional[str]
-    coords: Optional[str]
-    line_number_of_date: Optional[int]
-    line_number_of_lat_long: Optional[int]
-    line_number_air_temp_noon: Optional[int]
-    line_number_of_air_temp_daily_mean: Optional[int]
-    line_number_of_water_temp_surface: Optional[int]
-    line_number_of_water_temp_bottom: Optional[int]
-    line_number_of_water_density_surface: Optional[int]
-    line_number_of_water_density_bottom: Optional[int]
     errors: ErrorType
 
 
@@ -95,29 +85,19 @@ def get_new_station(part: int) -> Station:
         end_page_line=None,
         raw_text=[],
         date=None,
-        coords=None,
+        raw_coordinates=None,
         lat=None,
         long=None,
         raw_air_temp_noon=None,
         raw_air_temp_daily_mean=None,
         air_temp_daily_mean=None,
         air_temp_noon=None,
-        raw_water_temp_surface=None,
+        raw_water_temp=None,
         water_temp_bottom=None,
         water_temp_surface=None,
-        raw_water_temp_bottom=None,
-        raw_water_density_bottom=None,
-        raw_water_density_surface=None,
+        raw_water_density=None,
         water_density_bottom=None,
         water_density_surface=None,
-        line_number_of_date=None,
-        line_number_of_lat_long=None,
-        line_number_air_temp_noon=None,
-        line_number_of_air_temp_daily_mean=None,
-        line_number_of_water_temp_surface=None,
-        line_number_of_water_temp_bottom=None,
-        line_number_of_water_density_bottom=None,
-        line_number_of_water_density_surface=None,
         species_name=None,
         offset_start=None,
         offset_end=None,
@@ -410,16 +390,7 @@ def parse_species_names_gnrd(station: Station):
 #     return df
 
 
-def dms_to_lat_long(degree: float, minute: float, second: float) -> float:
-    if not second and not minute:
-        return degree
-    elif not second and minute:
-        return degree + minute / 60
-    else:
-        return degree + minute / 60 + second / 3600
-
-
-def parse_coordinates(text: str) -> Tuple[Optional[Coordinates], Optional[str]]:
+def parse_coordinates(text: str) -> Tuple[Coordinates, ErrorType]:
     try:
         dms = re.search(
             r"lat[^\d]*"
@@ -451,277 +422,173 @@ def parse_coordinates(text: str) -> Tuple[Optional[Coordinates], Optional[str]]:
             if matches["long_direction"] == "W":
                 long = -long
 
-            return {"coords": dms.group(), "lat": lat, "long": long}, None
-        return None, "Could not find coordinates"
+            return {"raw_coordinates": dms.group(), "lat": lat, "long": long}, {}
+        return {}, {"coords": ["Could not find coordinates"]}
     except Exception as e:
-        return None, f"line: {e.__traceback__.tb_lineno}: {e}"
+        return {}, {"coords": [f"line: {e.__traceback__.tb_lineno}: {e}"]}
 
 
-def parse_air_temperature(line: str) -> Tuple[AirTemperature, ErrorType]:
-    # fix for line 33964 of part 1 summary
-    # 5.45 p.M. made sail and proceeded towards the Crozet Islands. Temperature of air at
+def parse_air_temperature(text: str) -> Tuple[AirTemperature, ErrorType]:
+    results = {}
     errors = {}
 
-    if ";" in line:
-        raw_air_temp_noon = line.split(";")[0].strip()
-        air_temp_noon = raw_air_temp_noon.split(",")[1]
-        air_temp_noon = re.sub("[^0-9]", "", air_temp_noon)
-        air_temp_noon = float((air_temp_noon[0:-1] + "." + air_temp_noon[-1]).strip())
-
-        try:
-            raw_air_temp_daily_mean = line.split(";")[1].strip()
-            air_temp_daily_mean = raw_air_temp_daily_mean.split(",")[1]
-            try:
-                air_temp_daily_mean = air_temp_daily_mean.split(".")[0]
-                air_temp_daily_mean = re.sub("[^0-9]", "", air_temp_daily_mean)
-                air_temp_daily_mean = float(
-                    (air_temp_daily_mean[0:-1] + "." + air_temp_daily_mean[-1]).strip()
-                )
-
-            except Exception as e:
-                air_temp_daily_mean = re.sub("[^0-9]", "", air_temp_daily_mean)
-                air_temp_daily_mean = float(
-                    (air_temp_daily_mean[0:-1] + "." + air_temp_daily_mean[-1]).strip()
-                )
-                errors["air_temp_daily_mean"] = [
-                    f"line: {e.__traceback__.tb_lineno}: {e}"
-                ]
-
-        except Exception as e:
-            raw_air_temp_daily_mean = None
-            air_temp_daily_mean = None
-            errors["air_temp_daily_mean"] = [f"line: {e.__traceback__.tb_lineno}: {e}"]
-    else:
-        raw_air_temp_noon = line.strip()
-        air_temp_noon = raw_air_temp_noon.split(",")[1]
-        air_temp_noon = re.sub("[^0-9]", "", air_temp_noon)
-        air_temp_noon = float((air_temp_noon[0:-1] + "." + air_temp_noon[-1]).strip())
-        raw_air_temp_daily_mean = None
-        air_temp_daily_mean = None
-
-    return (
-        {
-            "raw_air_temp_noon": raw_air_temp_noon,
-            "raw_air_temp_daily_mean": raw_air_temp_daily_mean,
-            "air_temp_noon": air_temp_noon,
-            "air_temp_daily_mean": air_temp_daily_mean,
-        },
-        errors,
+    raw_air_temp_noon = re.search(
+        r"air at noon[^\d]*(?P<integer>\d+)[^\d]*(?P<fraction>\d+)", text
     )
-
-
-def parse_water_temperature(line: str) -> Tuple[WaterTemperature, ErrorType]:
-    errors = {}
-
-    if ";" in line:
-        raw_water_temp_surface = line.split(";")[0].strip()
-        try:
-            water_temp_surface = raw_water_temp_surface.split(",")[1]
-            water_temp_surface = re.sub("[^0-9]", "", water_temp_surface)
-            water_temp_surface = float(
-                (water_temp_surface[0:-1] + "." + water_temp_surface[-1]).strip()
-            )
-
-        except Exception as e:
-            # currentWaterTempSurfaceDegree = ""
-            water_temp_surface = re.sub("[^0-9]", "", raw_water_temp_surface)
-            water_temp_surface = float(
-                (water_temp_surface[0:-1] + "." + water_temp_surface[-1]).strip()
-            )
-            errors["water_temp_surface"] = [f"line: {e.__traceback__.tb_lineno}: {e}"]
-
-        try:
-            raw_water_temp_bottom = line.split(";")[1].strip()
-            water_temp_bottom = raw_water_temp_bottom.split(",")[1]
-            try:
-                water_temp_bottom = water_temp_bottom.split(".")[0]
-                water_temp_bottom = re.sub("[^0-9]", "", water_temp_bottom)
-                water_temp_bottom = float(
-                    (water_temp_bottom[0:-1] + "." + water_temp_bottom[-1]).strip()
-                )
-
-            except Exception as e:
-                water_temp_bottom = water_temp_bottom
-                water_temp_bottom = re.sub("[^0-9]", "", water_temp_bottom)
-                water_temp_bottom = float(
-                    (water_temp_surface[0:-1] + "." + water_temp_bottom[-1]).strip()
-                )
-                errors["water_temp_bottom"] = [
-                    f"line: {e.__traceback__.tb_lineno}: {e}"
-                ]
-        except Exception as e:
-            raw_water_temp_bottom = None
-            water_temp_bottom = None
-            errors["water_temp_bottom"] = [f"line: {e.__traceback__.tb_lineno}: {e}"]
+    if raw_air_temp_noon:
+        results["raw_air_temp_noon"] = raw_air_temp_noon.group()
+        air_temp_noon = raw_air_temp_noon.groupdict()
+        results["air_temp_noon"] = float(
+            f"{air_temp_noon['integer']}.{air_temp_noon['fraction']}"
+        )
     else:
-        raw_water_temp_surface = line.strip()
-        try:
-            water_temp_surface = raw_water_temp_surface.split(",")[1]
-            water_temp_surface = re.sub("[^0-9]", "", water_temp_surface)
-            water_temp_surface = float(
-                (water_temp_surface[0:-1] + "." + water_temp_surface[-1]).strip()
-            )
-        except Exception as e:
-            water_temp_surface = None
-            errors["water_temp_surface"] = [f"line: {e.__traceback__.tb_lineno}: {e}"]
+        errors["air_temp_noon"] = ["Could not parse air temperature at noon"]
 
-        raw_water_temp_bottom = None
-        water_temp_bottom = None
-        # need to fix if in the form:
-        # Temperature of water :—
-        #
-        # Surface, . . . . 72'5 900 fathoms, . . . 39°8
-        # 100 fathoms, . , . 66:5 1000 _—sé=éy«y . . . 39°3
-        # 200_ Cs, . , ; 60°3 1100 _s=»“"»~ . . . 38°8
-        # 300_—SC=é»; , , . 53°8 1200 __s=»“", . . . 38°3
-        # 400_ ,, , . ~ 475 1300 _—sé=é“»"» . . . 37°9
-        # 500 _—Ssé=»; ; . . 43°2 1400 _ _,, . . . 37°5
-        # 600 _,, , , . 41°6 1500 _—=s=é»; : , . 71
-        # 700_—=C=»y . . , 40°7 Bottom, . ; . , 36°2
-        # 800 __—,, . . , 40°2
-
-    return (
-        {
-            "raw_water_temp_surface": raw_water_temp_surface,
-            "water_temp_surface": water_temp_surface,
-            "raw_water_temp_bottom": raw_water_temp_bottom,
-            "water_temp_bottom": water_temp_bottom,
-        },
-        errors,
+    raw_air_temp_daily_mean = re.search(
+        r"mean for the day[^\d]*(?P<integer>\d+)[^\d]*(?P<fraction>\d+)", text
     )
+    if raw_air_temp_daily_mean:
+        results["raw_air_temp_daily_mean"] = raw_air_temp_daily_mean.group()
+        air_temp_daily_mean = raw_air_temp_daily_mean.groupdict()
+        results["air_temp_daily_mean"] = float(
+            f"{air_temp_daily_mean['integer']}.{air_temp_daily_mean['fraction']}"
+        )
+    else:
+        errors["air_temp_daily_mean"] = ["Could not parse daily mean air temperature"]
+
+    return results, errors
 
 
-def parse_density(line: str) -> Tuple[Density, ErrorType]:
+def parse_water_temperature(text: str) -> Tuple[WaterTemperature, ErrorType]:
+    # TODO add support for parsing bottom water temperatures that are presented as a list. e.g.:
+    #  Temperature of water :—
+    #  Surface, . . . . 72'5 900 fathoms, . . . 39°8
+    #  100 fathoms, . , . 66:5 1000 _—sé=éy«y . . . 39°3
+    #  200_ Cs, . , ; 60°3 1100 _s=»“"»~ . . . 38°8
+    #  300_—SC=é»; , , . 53°8 1200 __s=»“", . . . 38°3
+    #  400_ ,, , . ~ 475 1300 _—sé=é“»"» . . . 37°9
+    #  500 _—Ssé=»; ; . . 43°2 1400 _ _,, . . . 37°5
+    #  600 _,, , , . 41°6 1500 _—=s=é»; : , . 71
+    #  700_—=C=»y . . , 40°7 Bottom, . ; . , 36°2
+    #  800 __—,, . . , 40°2
+
+    results = {}
     errors = {}
 
-    if ";" in line:
-        raw_water_density_surface = line.split(";")[0].strip()
-        water_density_surface = raw_water_density_surface.split(",")[1]
-        water_density_surface = re.sub("[^0-9]", "", water_density_surface)
-        water_density_surface = float(
-            (water_density_surface[0] + "." + water_density_surface[1:]).strip()
+    raw_water_temp = re.search(
+        r"water at surface[^\d]*"
+        r"(?P<surface_integer>\d+)[^\d]*"
+        r"(?P<surface_fraction>\d+)"
+        r"(?:"
+        r"[^\d]*bottom[^\d]*"
+        r"(?P<bottom_integer>\d+)[^\d]*"
+        r"(?P<bottom_fraction>\d+)"
+        r")?",
+        text,
+    )
+    if raw_water_temp:
+        results["raw_water_temp"] = raw_water_temp.group()
+        water_temp = raw_water_temp.groupdict()
+
+        results["water_temp_surface"] = float(
+            f"{water_temp['surface_integer']}.{water_temp['surface_fraction']}"
         )
 
-        raw_water_density_bottom = line.split(";")[1].strip()
-        water_density_bottom = raw_water_density_bottom.split(",")[1].strip()
-        try:
-            water_density_bottom = water_density_bottom.split(".")[0]
-            water_density_bottom = re.sub("[^0-9]", "", water_density_bottom)
-            water_density_bottom = float(
-                (water_density_bottom[0] + "." + water_density_bottom[1:]).strip()
-            )
+        water_temp_bottom = ""
+        if water_temp["bottom_integer"]:
+            water_temp_bottom = water_temp["bottom_integer"]
+        if water_temp["bottom_fraction"]:
+            water_temp_bottom = f"{water_temp_bottom}.{water_temp['bottom_fraction']}"
 
-        except Exception as e:
-            water_density_bottom = re.sub("[^0-9]", "", water_density_bottom)
-            water_density_bottom = float(
-                (water_density_bottom[0] + "." + water_density_bottom[1:]).strip()
-            )
-            errors["water_density_bottom"] = [f"line: {e.__traceback__.tb_lineno}: {e}"]
+        if water_temp_bottom:
+            results["water_temp_bottom"] = float(water_temp_bottom)
+        else:
+            errors["water_temp_bottom"] = ["Could not parse bottom water temperature"]
     else:
-        try:
-            raw_water_density_surface = line.strip()
-            water_density_surface = raw_water_density_surface.split(",")[1]
-            water_density_surface = re.sub("[^0-9]", "", water_density_surface)
-            water_density_surface = float(
-                (water_density_surface[0] + "." + water_density_surface[1:]).strip()
-            )
-        except Exception as e:
-            raw_water_density_surface = None
-            water_density_surface = None
-            errors["water_density_surface"] = [
-                f"line: {e.__traceback__.tb_lineno}: {e}"
-            ]
+        errors["water_temp"] = ["Could not parse water temperature"]
 
-        raw_water_density_bottom = None
-        water_density_bottom = None
-        # need to fix if in the form:
-        # Density at 60° F. :—
+    return results, errors
 
-        # Surface, . . . 1:02739 400 fathoms, . . 102640
-        # 100 fathoms, ; 102782 500 - , . 102612
-        # 200 , =. . 1:02708 Bottom, . , ; 102607
-        # 300 , ~~. , 1:02672
 
-    return (
-        {
-            "raw_water_density_surface": raw_water_density_surface,
-            "water_density_surface": water_density_surface,
-            "raw_water_density_bottom": raw_water_density_bottom,
-            "water_density_bottom": water_density_bottom,
-        },
-        errors,
+def parse_density(text: str) -> Tuple[Density, ErrorType]:
+    # TODO add support for parsing bottom water densities that are presented as a list. e.g.:
+    #  need to fix if in the form:
+    #  Density at 60° F. :—
+    #  Surface, . . . 1:02739 400 fathoms, . . 102640
+    #  100 fathoms, ; 102782 500 - , . 102612
+    #  200 , =. . 1:02708 Bottom, . , ; 102607
+    #  300 , ~~. , 1:02672
+
+    results = {}
+    errors = {}
+
+    raw_water_density = re.search(
+        r"Density.*?at surface[^\d]*"
+        r"(?P<surface_integer>\d+)[^\d]*"
+        r"(?P<surface_fraction>\d+)"
+        r"(?:.*?"
+        r"bottom[^\d]*"
+        r"(?P<bottom_integer>\d+)[^\d]*"
+        r"(?P<bottom_fraction>\d+)"
+        r")?",
+        text,
     )
 
+    if raw_water_density:
+        results["raw_water_density"] = raw_water_density.group()
+        water_density = raw_water_density.groupdict()
 
-def parse_date(text: str) -> Tuple[Optional[str], Optional[str]]:
+        results["water_density_surface"] = float(
+            f"{water_density['surface_integer']}.{water_density['surface_fraction']}"
+        )
+
+        water_density_bottom = ""
+        if water_density["bottom_integer"]:
+            water_density_bottom = water_density["bottom_integer"]
+        if water_density["bottom_fraction"]:
+            water_density_bottom = (
+                f"{water_density_bottom}.{water_density['bottom_fraction']}"
+            )
+
+        if water_density_bottom:
+            results["water_density_bottom"] = float(water_density_bottom)
+        else:
+            errors["water_density_bottom"] = ["Could not parse bottom water density"]
+    else:
+        errors["water_density"] = ["Could not parse water density"]
+
+    return results, errors
+
+
+def parse_date(text: str) -> Tuple[Optional[str], ErrorType]:
     try:
-        return re.search(r"\w+ \d?\d, ?\d{4}", text).group(), None
+        return re.search(r"\w+ \d?\d, ?\d{4}", text).group(), {}
     except Exception as e:
-        return None, f"line: {e.__traceback__.tb_lineno}: {e}"
+        return None, {"date": [f"line: {e.__traceback__.tb_lineno}: {e}"]}
 
 
 def get_environment_info(station: Station):
-    first_air_temp = True
-    first_water_temp = True
-    first_density = True
-
     text = "\n".join(station["raw_text"])
 
-    (date, date_error) = parse_date(text)
-    if date:
-        station["date"] = date
-    if date_error:
-        station["errors"].update({"date": [date_error]})
+    (date, date_errors) = parse_date(text)
+    station["date"] = date
+    station["errors"].update(date_errors)
 
     (coords, coords_errors) = parse_coordinates(text)
-    if coords:
-        station.update(coords)
-    if coords_errors:
-        station["errors"].update(coords_errors)
+    station.update(coords)
+    station["errors"].update(coords_errors)
 
-    for idx, line in enumerate(station["raw_text"]):
-        line_number = idx + 1
+    (air_temperature, air_temperature_errors) = parse_air_temperature(text)
+    station.update(air_temperature)
+    station["errors"].update(air_temperature_errors)
 
-        if "Temperature of air" in line and first_air_temp:
-            first_air_temp = False
+    (water_temperature, water_temperature_errors) = parse_water_temperature(text)
+    station.update(water_temperature)
+    station["errors"].update(water_temperature_errors)
 
-            (air_temperature, air_temperature_errors) = parse_air_temperature(line)
-            station.update(air_temperature)
-            station["errors"].update(air_temperature_errors)
-            station.update(
-                {
-                    "line_number_air_temp_noon": line_number,
-                    "line_number_of_air_temp_daily_mean": line_number,
-                }
-            )
-
-        if "Temperature of water" in line and first_water_temp:
-            first_water_temp = False
-
-            (water_temperature, water_temperature_errors) = parse_water_temperature(
-                line
-            )
-            station.update(water_temperature)
-            station["errors"].update(water_temperature_errors)
-            station.update(
-                {
-                    "line_number_of_water_temp_surface": line_number,
-                    "line_number_of_water_temp_bottom": line_number,
-                }
-            )
-
-        if "Density" in line and first_density:
-            first_density = False
-
-            (density, density_errors) = parse_density(line)
-            station.update(density)
-            station["errors"].update(density_errors)
-            station.update(
-                {
-                    "line_number_of_water_density_surface": line_number,
-                    "line_number_of_water_density_bottom": line_number,
-                }
-            )
+    (density, density_errors) = parse_density(text)
+    station.update(density)
+    station["errors"].update(density_errors)
 
 
 def get_stations_with_errors(errors: List[str]):
