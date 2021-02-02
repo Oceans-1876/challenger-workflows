@@ -677,7 +677,7 @@ def get_environment_info(station: Station):
     if coords:
         station.update(coords)
     if coords_errors:
-        station["coords"] = coords_errors
+        station["errors"].update(coords_errors)
 
     for idx, line in enumerate(station["raw_text"]):
         line_number = idx + 1
