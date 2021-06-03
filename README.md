@@ -2,11 +2,14 @@
 
 ## Data Pipeline
 
-> Requires python > 3.8 and docker
+> Requires python > 3.9 and docker
 
 ### Setup
 
-- Install the requirements in `requirements.txt`
+- Install [Poetry](https://github.com/python-poetry/poetry) on your system, either globally or in your virtual environments (the former is preferred).
+- Run `poetry install` to install the project dependencies.
+  - If you just need to run the extractor and do not need the dev dependencies, you can run `poetry install --no-dev`.
+- If you are going to do development work on the extractor, run `pre-commit install` in the project root.
 - Put the following PDF files in the `inputs` folder (required for `--pdf` flag):
     - Challenger Summary part 1.pdf
     - Challenger Summary part 2.pdf

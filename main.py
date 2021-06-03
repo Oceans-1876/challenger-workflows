@@ -4,11 +4,7 @@ import re
 import subprocess
 from json import JSONDecodeError
 from pathlib import Path
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Tuple
-from typing import TypedDict
+from typing import Dict, List, Optional, Tuple, TypedDict
 
 import click
 import pandas as pd
@@ -134,7 +130,7 @@ def process_pdf():
 
 
 def parse_data():
-    """ Run info extraction techniques on file """
+    """Run info extraction techniques on file"""
     parts = [1, 2]
 
     for part_number in parts:
@@ -183,7 +179,7 @@ def merge_files(parts: List[int]):
 
 
 def get_stations(part_number: int, texts_path: Path) -> pd.DataFrame:
-    """ Break summary texts into sections for each station, put in dictionary"""
+    """Break summary texts into sections for each station, put in dictionary"""
     stations_output_path = texts_path.parent.parent / "stations"
     stations_output_path.mkdir(exist_ok=True)
 
