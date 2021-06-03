@@ -1,20 +1,9 @@
 #!/usr/bin/env python3
-import subprocess
-import numpy as np
-import random
 import pandas as pd
-import os
-import requests
-import json
-import re
-import datetime
-import sys
-import time
-import io
-import pickle
 
 rootPath = "/home/mwiecksosa/oceans1876/"
-dataPath = rootPath+"data/"
+dataPath = rootPath + "data/"
+
 
 def main():
 
@@ -31,41 +20,42 @@ def main():
         text_file.write(indexSpecies)
     """
 
-    f = dataPath+'index.txt'
+    f = dataPath + "index.txt"
 
-    with open(f,'r') as f:
+    with open(f, "r") as f:
         dataList = []
         speciesName = ""
         speciesPage = ""
         genusName = ""
         genusPage = ""
-        for i,line in enumerate(f):
+        for i, line in enumerate(f):
             print(line)
             try:
                 if line[0].isupper():
                     genusName = line.split(",")[0].split(" ")[0]
                     try:
                         genusPage = line.split(",")[1]
-                    except:
+                    except IndexError:
                         genusPage = "NA"
                 elif line[0].islower():
                     speciesName = genusName + " " + line.split(",")[0]
                     try:
                         speciesPage = line.split(",")[1]
-                    except:
+                    except IndexError:
                         speciesPage = "NA"
             except Exception as e:
                 print(e)
-                speciesName=""
-                speciesPage=""
-                genusName=""
-                genusPage=""
+                speciesName = ""
+                speciesPage = ""
+                genusName = ""
+                genusPage = ""
 
             dataList.append([speciesName, speciesPage, genusName, genusPage])
 
         colnames = ["speciesName", "speciesPage", "genusName", "genusPage"]
-        df = pd.DataFrame(columns=colnames,data=dataList)
-        df.to_csv(dataPath+"indexSpeciesExtracted.csv")
+        df = pd.DataFrame(columns=colnames, data=dataList)
+        df.to_csv(dataPath + "indexSpeciesExtracted.csv")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
