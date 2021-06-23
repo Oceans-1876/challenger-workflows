@@ -6,4 +6,4 @@ fi
 
 args="$*"
 
-docker run --rm -it -v "$PWD":/mnt oceans-1876-parser sh -c "cd /mnt && python3 main.py $args"
+docker run --rm -it -v "$PWD":/mnt oceans-1876-parser sh -c "cd /mnt && python3 pipeline/main.py $args"
