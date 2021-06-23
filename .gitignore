@@ -1,7 +1,4 @@
-clowder-data/
-outputs/
-resources/
-traefik/
+data/*
 venv/
 
 .env
@@ -11,3 +8,5 @@ venv/
 *.log
 *.png
 *.zip
+
+!.gitkeep

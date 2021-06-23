@@ -6,22 +6,25 @@
 
 ### Setup
 
-- Install [Poetry](https://github.com/python-poetry/poetry) on your system, either globally or in your virtual environments (the former is preferred).
+- Install [Poetry](https://github.com/python-poetry/poetry) on your system, either globally or in your virtual
+  environments (the former is preferred).
 - Run `poetry install` to install the project dependencies.
   - If you just need to run the extractor and do not need the dev dependencies, you can run `poetry install --no-dev`.
 - If you are going to do development work on the extractor, run `pre-commit install` in the project root.
-- Put the following PDF files in the `inputs` folder (required for `--pdf` flag):
+- Put the following PDF files in the `data/pdfs` folder (required for `--pdf` flag):
     - Challenger Summary part 1.pdf
     - Challenger Summary part 2.pdf
-- Download the summary report zip files for each part from the following urls and extract them in
-  `inputs/part<>/pages/texts`:
-    - Part 1: http://hdl.handle.net/2027/uc1.c2755812
-    - Part 2: http://hdl.handle.net/2027/uc1.c2755813
+- Download the summary report zip files from the following urls and put them in `data/<VOLUME>/pages/texts` folders:
+
+  | VOLUME | Url                                     |
+  | ------ | --------------------------------------- |
+  | `s1`   | http://hdl.handle.net/2027/uc1.c2755812 |
+  | `s2`   | http://hdl.handle.net/2027/uc1.c2755813 |
 
 
 ### How to use
 
-`parse.sh` accepts two flags as mentioned in its help:
+Run `parse.sh --help` to see the available actions and options:
 
 ```
 Usage: [OPTIONS]
@@ -51,6 +54,6 @@ Options:
                    error for their date, lat, and longs fields).
 ```
 
-Split PDF images are put in `images` folder for each part.
+Split PDF images are put in `<VOLUME>/pages/images` folder for each volume.
 
-The parsed data for each station is saved in a json file under `stations` folder for each part.
+The parsed data for each station is saved in a json file under `<VOLUME>/stations` folder for each volume.
