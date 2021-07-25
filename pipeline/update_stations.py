@@ -103,7 +103,7 @@ def run():
         """
         previous_station = hathitrust_stations.loc[current_idx - 1]
 
-        if previous_station["Range"][-1].split("-")[-1] == current_page:
+        if previous_station["Range"][-1][-1].split("-")[-1] == current_page:
             # Only update if the end page of the previous station is the same is the start page of the current station
             previous_station_text_identifier = previous_station["Text Identifier"]
             if previous_station_text_identifier in stations_texts:
@@ -138,7 +138,7 @@ def run():
 
             for section_idx, (section, pages) in enumerate(station["Range"]):
                 # Each section page range (`pages`) is a string in the following format: "<start>-<end>"
-                for page in pages.split("-"):
+                for page_idx, page in enumerate(pages.split("-")):
                     filename = (
                         WORK_DIR
                         / "HathiTrust"
@@ -150,7 +150,7 @@ def run():
                         with open(filename, "r") as f:
                             page_text = f.read()
 
-                        if section_idx == 0:
+                        if section_idx == 0 and page_idx == 0:
                             # First page of range contains the station text identifier
                             results = fuzzysearch.find_near_matches(
                                 station_text_identifier,
