@@ -76,22 +76,8 @@ def run():
 
     ramm_stations = pd.read_csv(WORK_DIR / "RAMM" / "stations.csv")
 
-    # Rename temp columns so they can be aggregated into one column
-    fathom_temp_f = ramm_stations.filter(regex="Temp(.*)")
-    ramm_stations.drop(columns=fathom_temp_f.columns, inplace=True)
-    ramm_stations["Temp (F) at Fathoms"] = (
-        fathom_temp_f.rename(
-            columns=lambda c: re.sub(
-                r"Temp \(F\) at (\d+) Fathoms(?:\.(\d+))?",
-                lambda s: f"{s.groups()[0]}{f'-{s.groups()[1]}' if s.groups()[1] else ''}",
-                c,
-            )
-        )
-        .to_dict(orient="index")
-        .values()
-    )
-
     hathitrust_stations = pd.read_csv(WORK_DIR / "HathiTrust" / "stations.csv").dropna()
+    hathitrust_stations["Range"] = hathitrust_stations["Range"].apply(json.loads)
 
     # Cache the texts based on stations' text identifiers
     stations_texts = {}
@@ -117,7 +103,7 @@ def run():
         """
         previous_station = hathitrust_stations.loc[current_idx - 1]
 
-        if previous_station["Page Range"].split("-")[-1] == current_page:
+        if previous_station["Range"][-1].split("-")[-1] == current_page:
             # Only update if the end page of the previous station is the same is the start page of the current station
             previous_station_text_identifier = previous_station["Text Identifier"]
             if previous_station_text_identifier in stations_texts:
@@ -150,44 +136,45 @@ def run():
         if station_text_identifier not in stations_texts:
             station_text = []
 
-            # Station Page Range is a string in the following format: "<start>-<end>"
-            for page_idx, page in enumerate(station["Page Range"].split("-")):
-                filename = (
-                    WORK_DIR
-                    / "HathiTrust"
-                    / station["Section"]
-                    / "texts"
-                    / f"{int(page) - 1:08}.txt"
-                )
-                try:
-                    with open(filename, "r") as f:
-                        page_text = f.read()
+            for section_idx, (section, pages) in enumerate(station["Range"]):
+                # Each section page range (`pages`) is a string in the following format: "<start>-<end>"
+                for page in pages.split("-"):
+                    filename = (
+                        WORK_DIR
+                        / "HathiTrust"
+                        / section
+                        / "texts"
+                        / f"{int(page) - 1:08}.txt"
+                    )
+                    try:
+                        with open(filename, "r") as f:
+                            page_text = f.read()
 
-                    if page_idx == 0:
-                        # First page of range contains the station text identifier
-                        results = fuzzysearch.find_near_matches(
-                            station_text_identifier,
-                            page_text,
-                            max_l_dist=STATION_NAMES_MAX_LEVENSHTEIN_DISTANCE,
-                        )
-                        if results:
-                            results.sort(key=lambda r: r.dist)
-                            station_text.append(page_text[results[0].start :])
+                        if section_idx == 0:
+                            # First page of range contains the station text identifier
+                            results = fuzzysearch.find_near_matches(
+                                station_text_identifier,
+                                page_text,
+                                max_l_dist=STATION_NAMES_MAX_LEVENSHTEIN_DISTANCE,
+                            )
+                            if results:
+                                results.sort(key=lambda r: r.dist)
+                                station_text.append(page_text[results[0].start :])
 
-                            if idx > 0:
-                                # On the first page of a station section, update the previous station
-                                # and remove the part that belongs to the new station
-                                update_previous_station_text(
-                                    idx, page, page_text, results[0].start
+                                if idx > 0:
+                                    # On the first page of a station section, update the previous station
+                                    # and remove the part that belongs to the new station
+                                    update_previous_station_text(
+                                        idx, page, page_text, results[0].start
+                                    )
+                            else:
+                                logger.warning(
+                                    f"Could not find the station name in page: {station_text_identifier} - {filename}"
                                 )
                         else:
-                            logger.warning(
-                                f"Could not find the station name in page: {station_text_identifier} - {filename}"
-                            )
-                    else:
-                        station_text.append(page_text)
-                except FileNotFoundError:
-                    logger.warning(f"File does not exist: {filename}")
+                            station_text.append(page_text)
+                    except FileNotFoundError:
+                        logger.warning(f"File does not exist: {filename}")
 
             stations_texts[station_text_identifier] = station_text
 
@@ -236,6 +223,21 @@ def run():
     # Append the stations' species to RAMM data
     ramm_stations["Species"] = ramm_stations["HathiTrust"].apply(
         lambda r: stations_species.get(r["Text Identifier"] if pd.notna(r) else None)
+    )
+
+    # Rename temp columns so they can be aggregated into one column
+    fathom_temp_f = ramm_stations.filter(regex="Temp(.*)")
+    ramm_stations.drop(columns=fathom_temp_f.columns, inplace=True)
+    ramm_stations["Temp (F) at Fathoms"] = (
+        fathom_temp_f.rename(
+            columns=lambda c: re.sub(
+                r"Temp \(F\) at (\d+) Fathoms(?:\.(\d+))?",
+                lambda s: f"{s.groups()[0]}{f'-{s.groups()[1]}' if s.groups()[1] else ''}",
+                c,
+            )
+        )
+        .to_dict(orient="index")
+        .values()
     )
 
     # Save the updated RAMM data
