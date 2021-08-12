@@ -36,11 +36,11 @@ jobs:
           rm gnfinder-v0.14.2-linux.tar.gz
 
       - name: Install gnverifier v0.3.3
-          working-directory: /root
-          run: |
-            curl -L -o gnverifier-v0.3.3-linux.tar.gz https://github.com/gnames/gnverifier/releases/download/v0.3.3/gnverifier-v0.3.3-linux.tar.gz
-            tar -xf gnverifier-v0.3.3-linux.tar.gz
-            mv gnverifier /bin
+        working-directory: /root
+        run: |
+          curl -L -o gnverifier-v0.3.3-linux.tar.gz https://github.com/gnames/gnverifier/releases/download/v0.3.3/gnverifier-v0.3.3-linux.tar.gz
+          tar -xf gnverifier-v0.3.3-linux.tar.gz
+          mv gnverifier /bin
 
       - name: Setup Python 3.9
         uses: actions/setup-python@v2
