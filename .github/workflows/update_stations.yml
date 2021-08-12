@@ -28,19 +28,18 @@ jobs:
           git -c core.sshCommand="ssh -i ~/.ssh/data_submodule -F /dev/null" submodule update
 
       - name: Install gnfinder v0.14.2
-        working-directory: /root
+        working-directory: /tmp
         run: |
           curl -L -o gnfinder-v0.14.2-linux.tar.gz https://github.com/gnames/gnfinder/releases/download/v0.14.2/gnfinder-v0.14.2-linux.tar.gz
           tar -xf gnfinder-v0.14.2-linux.tar.gz
-          mv gnfinder /bin
-          rm gnfinder-v0.14.2-linux.tar.gz
+          sudo mv gnfinder /bin
 
       - name: Install gnverifier v0.3.3
-        working-directory: /root
+        working-directory: /tmp
         run: |
           curl -L -o gnverifier-v0.3.3-linux.tar.gz https://github.com/gnames/gnverifier/releases/download/v0.3.3/gnverifier-v0.3.3-linux.tar.gz
           tar -xf gnverifier-v0.3.3-linux.tar.gz
-          mv gnverifier /bin
+          sudo mv gnverifier /bin
 
       - name: Setup Python 3.9
         uses: actions/setup-python@v2
