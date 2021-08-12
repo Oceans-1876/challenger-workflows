@@ -1,0 +1,75 @@
+name: Update stations text and species
+
+on: workflow_dispatch
+
+jobs:
+  update-stations-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set git global config
+        run: |
+          git config --global user.name "${GITHUB_ACTOR}"
+          git config --global user.email "bot@noreply.github.com"
+
+      - name: Create ssh key for the `data` submodule
+        run: |
+          mkdir -p ~/.ssh
+          cat << EOF > ~/.ssh/data
+          ${{ secrets.SSH_KEY_DATA_SUBMODULE }}
+          EOF
+          chmod 600 ~/.ssh/data_submodule
+
+      - name: Check out repo
+        uses: actions/checkout@v2
+
+      - name: Initialize the `data` submodule
+        run: |
+          git -c core.sshCommand="ssh -i ~/.ssh/data_submodule -F /dev/null" submodule init
+          git -c core.sshCommand="ssh -i ~/.ssh/data_submodule -F /dev/null" submodule update
+
+      - name: Install gnfinder v0.14.2
+        working-directory: /root
+        run: |
+          curl -L -o gnfinder-v0.14.2-linux.tar.gz https://github.com/gnames/gnfinder/releases/download/v0.14.2/gnfinder-v0.14.2-linux.tar.gz
+          tar -xf gnfinder-v0.14.2-linux.tar.gz
+          mv gnfinder /bin
+          rm gnfinder-v0.14.2-linux.tar.gz
+
+      - name: Install gnverifier v0.3.3
+          working-directory: /root
+          run: |
+            curl -L -o gnverifier-v0.3.3-linux.tar.gz https://github.com/gnames/gnverifier/releases/download/v0.3.3/gnverifier-v0.3.3-linux.tar.gz
+            tar -xf gnverifier-v0.3.3-linux.tar.gz
+            mv gnverifier /bin
+
+      - name: Setup Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - name: Install python requirements
+        run: |
+          pip install -U pip
+          pip install poetry
+          poetry install --no-dev
+
+      - name: Update stations text and species
+        working-directory: ./pipeline
+        run: python update_stations.py
+
+      - name: Commit the `data` submodule changes
+        working-directory: ./data
+        run: |
+          git add .
+          git commit -a -m "Update stations text and species"
+          git -c core.sshCommand="ssh -i ~/.ssh/data_submodule -F /dev/null" push origin HEAD:main
+
+      - name: Update the `data` submodule ref
+        run: |
+          git add .
+          git commit -a -m "Update the `data` submodule ref"
+          git push
+
+      - name: Delete ssh keys
+        if: always()
+        run: rm -f ~/.ssh/*
