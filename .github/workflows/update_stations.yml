@@ -14,7 +14,7 @@ jobs:
       - name: Create ssh key for the `data` submodule
         run: |
           mkdir -p ~/.ssh
-          cat << EOF > ~/.ssh/data
+          cat << EOF > ~/.ssh/data_submodule
           ${{ secrets.SSH_KEY_DATA_SUBMODULE }}
           EOF
           chmod 600 ~/.ssh/data_submodule
