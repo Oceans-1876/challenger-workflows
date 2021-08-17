@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "data-pipeline"
+name = "challenger-workflows"
 version = "0.1.0"
 description = ""
-repository = "https://github.com/Oceans-1876/data-pipeline"
+repository = "https://github.com/Oceans-1876/challenger-workflows"
 authors = ["Kaveh Karimi-Asli <kaveh@illinois.edu>"]
 license = "BSD-3-Clause"
 readme = "README.md"
@@ -16,6 +16,10 @@ fuzzysearch = "^0.7.3"
 pre-commit = "^2.13.0"
 ipython = "^7.25.0"
 black = "^21.5b2"
+mypy = "^0.910"
+isort = "^5.9.3"
+autoflake = "^1.4"
+flake8 = "^3.9.2"
 
 [tool.isort]
 profile = "black"

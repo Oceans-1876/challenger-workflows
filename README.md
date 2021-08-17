@@ -20,4 +20,4 @@
 
 #### Update stations text and species:
 
-Run `python update_stations.py` from the `pipeline` folder.
+Run `python update_stations.py` from the `workflows` folder.

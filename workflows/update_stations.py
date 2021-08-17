@@ -13,6 +13,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import typing
 
 import fuzzysearch
 import pandas as pd
@@ -27,7 +28,8 @@ WORK_DIR = pathlib.Path("../data")
 
 def check_gnames_app(app_name: str, min_version: float) -> str:
     """
-    Check if the given gnames app exists on the system and its version is not less than min_version.
+    Check if the given gnames app exists on the system
+    and its version is not less than min_version.
     If the app does not exist terminate the process.
     If the version is not satisfied, log a warning.
 
@@ -70,7 +72,7 @@ def check_gnames_app(app_name: str, min_version: float) -> str:
         )
 
 
-def run():
+def run() -> None:
     gnfinder_version = check_gnames_app("gnfinder", 0.14)
     gnverifier_version = check_gnames_app("gnverifier", 0.3)
 
@@ -80,16 +82,17 @@ def run():
     hathitrust_stations["Range"] = hathitrust_stations["Range"].apply(json.loads)
 
     # Cache the texts based on stations' text identifiers
-    stations_texts = {}
+    stations_texts: typing.Dict[str, typing.List[str]] = {}
 
     def update_previous_station_text(
         current_idx: int,
         current_page: str,
         current_text: str,
         current_station_start_index: int,
-    ):
+    ) -> None:
         """
-        This is called when a new station is found. At this point, we need to trim the text that belongs to the new
+        This is called when a new station is found. At this point,
+        we need to trim the text that belongs to the new
         station from the previous station, if they shared a page.
         The previous station text is updated directly in `hathitrust_stations`.
 
@@ -98,13 +101,15 @@ def run():
         current_idx: row number for the current station in the loaded dataframe
         current_page: start page of the current station
         current_text: full text of the first page of the current station
-        current_station_start_index: where the current station text starts in the current page (i.e. `current_text`)
+        current_station_start_index: where the current station text
+            starts in the current page (i.e. `current_text`)
 
         """
         previous_station = hathitrust_stations.loc[current_idx - 1]
 
         if previous_station["Range"][-1][-1].split("-")[-1] == current_page:
-            # Only update if the end page of the previous station is the same is the start page of the current station
+            # Only update if the end page of the previous station is the same
+            # as the start page of the current station
             previous_station_text_identifier = previous_station["Text Identifier"]
             if previous_station_text_identifier in stations_texts:
                 # Get the offset value for the previous station in the current page
@@ -126,7 +131,8 @@ def run():
                 previous_station_text[-1] = previous_station_text_last_section_updated
             else:
                 logger.warning(
-                    f"Previous station does not have text: {previous_station['Station']}"
+                    f"Previous station does not have text: "
+                    f"{previous_station['Station']}"
                 )
 
     for idx, station in hathitrust_stations.iterrows():
@@ -137,7 +143,8 @@ def run():
             station_text = []
 
             for section_idx, (section, pages) in enumerate(station["Range"]):
-                # Each section page range (`pages`) is a string in the following format: "<start>-<end>"
+                # Each section page range (`pages`) is a string
+                # in the following format: "<start>-<end>"
                 for page_idx, page in enumerate(pages.split("-")):
                     filename = (
                         WORK_DIR
@@ -162,14 +169,16 @@ def run():
                                 station_text.append(page_text[results[0].start :])
 
                                 if idx > 0:
-                                    # On the first page of a station section, update the previous station
-                                    # and remove the part that belongs to the new station
+                                    # On the first page of a station section,
+                                    # update the previous station and remove
+                                    # the part that belongs to the new station
                                     update_previous_station_text(
                                         idx, page, page_text, results[0].start
                                     )
                             else:
                                 logger.warning(
-                                    f"Could not find the station name in page: {station_text_identifier} - {filename}"
+                                    f"Could not find the station name in page: "
+                                    f"{station_text_identifier} - {filename}"
                                 )
                         else:
                             station_text.append(page_text)
@@ -198,11 +207,15 @@ def run():
                 stdin=echo_proc.stdout,
                 stdout=subprocess.PIPE,
             ) as gnfinder_proc:
-                station_species = json.loads(gnfinder_proc.stdout.read())["names"] or []
+                if gnfinder_proc.stdout:
+                    station_species = (
+                        json.loads(gnfinder_proc.stdout.read())["names"] or []
+                    )
 
         stations_species[text_identifier] = station_species
 
-        # Use gnverifier to verify the parsed species, if they are not already in `all_species`
+        # Use gnverifier to verify the parsed species,
+        # if they are not already in `all_species`
         for species in station_species:
             if species["name"] not in all_species:
                 with subprocess.Popen(
@@ -210,9 +223,10 @@ def run():
                     ["gnverifier", "-f", "compact", species["name"]],
                     stdout=subprocess.PIPE,
                 ) as gnverifier_proc:
-                    all_species[species["name"]] = json.loads(
-                        gnverifier_proc.stdout.read()
-                    )
+                    if gnverifier_proc.stdout:
+                        all_species[species["name"]] = json.loads(
+                            gnverifier_proc.stdout.read()
+                        )
 
     # Append the stations' text to RAMM data
     hathitrust_stations.set_index("Station", inplace=True)
@@ -232,7 +246,8 @@ def run():
         fathom_temp_f.rename(
             columns=lambda c: re.sub(
                 r"Temp \(F\) at (\d+) Fathoms(?:\.(\d+))?",
-                lambda s: f"{s.groups()[0]}{f'-{s.groups()[1]}' if s.groups()[1] else ''}",
+                lambda s: f"{s.groups()[0]}"
+                f"{f'-{s.groups()[1]}' if s.groups()[1] else ''}",
                 c,
             )
         )

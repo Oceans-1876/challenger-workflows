@@ -55,7 +55,7 @@ jobs:
           POETRY_VIRTUALENVS_CREATE: false
 
       - name: Update stations text and species
-        working-directory: ./pipeline
+        working-directory: ./workflows
         run: python update_stations.py
 
       - name: Commit the `data` submodule changes
