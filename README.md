@@ -7,7 +7,7 @@
 ### Setup
 
 - After cloning the repo, run `git submodule init` and `git submodule update` to fetch the data
-  from [https://github.com/oceans-1876/data](https://github.com/oceans-1876/data).
+  from [https://github.com/oceans-1876/challenger-data](https://github.com/oceans-1876/challenger-data).
 - Install [gnfinder](https://github.com/gnames/gnfinder) v0.14.
 - Install [gnverifier](https://github.com/gnames/gnverifier) v0.3.
 - Install [Poetry](https://github.com/python-poetry/poetry) on your system, either globally or in your virtual
