@@ -13,18 +13,19 @@ from typing import Union
 Data = Union[dict, list[dict]]
 
 WORK_DIR = pathlib.Path("../data")
-print(WORK_DIR)
+
 # Define system specific paths
 species_json = WORK_DIR / "Oceans1876" / "species.json"
 stations_json = WORK_DIR / "Oceans1876" / "stations.json"
-ouput_species_json = WORK_DIR / "Oceans1876_subset" / "test_species.json"
-ouput_stations_json = WORK_DIR / "Oceans1876_subset" / "test_stations.json"
+output_species_json = WORK_DIR / "Oceans1876_subset" / "test_species.json"
+output_stations_json = WORK_DIR / "Oceans1876_subset" / "test_stations.json"
 
 # Define Cardinality of the Stations subset.
 N_stations = 15
 
+
 # Import JSON data
-def import_json(filename: str) -> Data:
+def import_json(filename: pathlib.Path) -> Data:
     try:
         with open(filename) as jf:
             data = json.load(jf)
@@ -34,7 +35,7 @@ def import_json(filename: str) -> Data:
 
 
 # Import JSON data
-def export_json(filename: str, output: Data) -> None:
+def export_json(filename: pathlib.Path, output: Data) -> None:
     try:
         (WORK_DIR / "Oceans1876_subset").mkdir(exist_ok=True)
         with open(filename, "w") as ojf:
@@ -43,10 +44,14 @@ def export_json(filename: str, output: Data) -> None:
         print(e.with_traceback())
 
 
+def create_subset(
+    species_json_path: pathlib.Path,
+    stations_json_path: pathlib.Path,
+    output_stations_json_path: pathlib.Path,
+    output_species_json_path: pathlib.Path,
+    n_stations: int,
+) -> None:
 
-
-def create_subset(species_json_path: str, stations_json_path: str, ouput_stations_json_path: str, ouput_species_json_path: str, N_stations: int) -> None:
-    
     # Species only
     species_data = import_json(species_json_path)[
         "species"
@@ -56,7 +61,7 @@ def create_subset(species_json_path: str, stations_json_path: str, ouput_station
     stations_data = import_json(stations_json_path)
 
     # Sample the Stations Data
-    subset_stations = stations_data[:N_stations]  # (List of Dictionaries)
+    subset_stations = stations_data[:n_stations]  # (List of Dictionaries)
     subset_species = {}  # (Dictionary of Dictionaries)
 
     for station in subset_stations:  # iterate through stations
@@ -68,10 +73,15 @@ def create_subset(species_json_path: str, stations_json_path: str, ouput_station
                 # else, add a key: value pair
                 subset_species[sp["name"]] = species_data[sp["name"]]
 
-    export_json(ouput_stations_json_path, subset_stations)
-    export_json(ouput_species_json_path, subset_species)
+    export_json(output_stations_json_path, subset_stations)
+    export_json(output_species_json_path, subset_species)
 
 
 if __name__ == "__main__":
-
-    create_subset(species_json, stations_json, ouput_stations_json, ouput_species_json, N_stations)
+    create_subset(
+        species_json,
+        stations_json,
+        output_stations_json,
+        output_species_json,
+        N_stations,
+    )
