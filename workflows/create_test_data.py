@@ -54,7 +54,7 @@ def create_subset(
 ) -> None:
 
     # Species only
-    species_data = import_json(species_json_path) 
+    species_data = import_json(species_json_path)
 
     # Stations only (List of Dictionaries)
     stations_data = import_json(stations_json_path)
