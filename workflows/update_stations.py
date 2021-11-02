@@ -13,7 +13,7 @@ import pathlib
 import re
 import subprocess
 import sys
-import typing
+from typing import Any, Dict, List
 
 import fuzzysearch
 import numpy as np
@@ -184,8 +184,8 @@ def check_gnames_app(app_name: str, min_version: float) -> str:
 
 
 def run() -> None:
-    gnfinder_version = check_gnames_app("gnfinder", 0.14)
-    gnverifier_version = check_gnames_app("gnverifier", 0.3)
+    gnfinder_version = check_gnames_app("gnfinder", 0.16)
+    gnverifier_version = check_gnames_app("gnverifier", 0.5)
 
     # Load all columns as string, i.e. dtype="object"
     ramm_stations = pd.read_csv(WORK_DIR / "RAMM" / "stations.csv", dtype="object")
@@ -207,7 +207,7 @@ def run() -> None:
     hathitrust_stations["Range"] = hathitrust_stations["Range"].apply(json.loads)
 
     # Cache the texts based on stations' text identifiers
-    stations_texts: typing.Dict[str, typing.List[str]] = {}
+    stations_texts: Dict[str, List[str]] = {}
 
     def update_previous_station_text(
         current_idx: int,
@@ -316,7 +316,10 @@ def run() -> None:
         lambda text_id: "\n".join(stations_texts[text_id])
     )
 
-    all_species = {}  # Holds all species across all stations
+    all_species_by_name = {}  # Holds all species across all stations by name
+    all_species_by_record_id: Dict[
+        str, Dict[str, Any]
+    ] = {}  # Holds all species across all stations by record id
     stations_species = {}  # Holds species by stations' text identifier
 
     for (text_identifier, text_list) in stations_texts.items():
@@ -340,18 +343,42 @@ def run() -> None:
         stations_species[text_identifier] = station_species
 
         # Use gnverifier to verify the parsed species,
-        # if they are not already in `all_species`
+        # if they are not already in `all_species_by_name`
         for species in station_species:
-            if species["name"] not in all_species:
+            if species["name"] not in all_species_by_name:
                 with subprocess.Popen(
                     # -s "9" uses World Register of Marine Species
                     ["gnverifier", "-f", "compact", species["name"]],
                     stdout=subprocess.PIPE,
                 ) as gnverifier_proc:
                     if gnverifier_proc.stdout:
-                        all_species[species["name"]] = json.loads(
-                            gnverifier_proc.stdout.read()
+                        verified_species = json.loads(gnverifier_proc.stdout.read())
+                        all_species_by_name[species["name"]] = verified_species
+                        match_type = verified_species["matchType"]
+                        record_id = verified_species.get("bestResult", {}).get(
+                            "recordId", None
                         )
+                        if record_id:
+                            species["recordId"] = record_id
+                            if record_id in all_species_by_record_id:
+                                if (
+                                    match_type == "Exact"
+                                    and all_species_by_record_id[record_id]["matchType"]
+                                    != "Exact"
+                                ):
+                                    all_species_by_record_id[
+                                        record_id
+                                    ] = verified_species
+                            else:
+                                all_species_by_record_id[record_id] = verified_species
+            else:
+                record_id = (
+                    all_species_by_name[species["name"]]
+                    .get("bestResult", {})
+                    .get("recordId", None)
+                )
+                if record_id:
+                    species["recordId"] = record_id
 
     # Rename temp columns so they can be aggregated into one column
     fathom_temp_f = ramm_stations.filter(regex="Temp(.*)")
@@ -394,7 +421,7 @@ def run() -> None:
                     "gnverifier": gnverifier_version,
                     "date": str(datetime.datetime.now()),
                 },
-                "species": all_species,
+                "species": all_species_by_record_id,
             },
             f,
             indent=2,
