@@ -35,7 +35,7 @@ def import_json(filename: pathlib.Path) -> Data:
         sys.exit(f"{filename} is missing")
 
 
-# Import JSON data
+# Export JSON data
 def export_json(filename: pathlib.Path, output: Data) -> None:
     try:
         (WORK_DIR / "Oceans1876_subset").mkdir(exist_ok=True)
