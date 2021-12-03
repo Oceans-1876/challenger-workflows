@@ -1,7 +1,8 @@
-import requests
 import json
 import pathlib
 import sys
+
+import requests
 
 WORK_DIR = pathlib.Path("../data")
 
@@ -9,6 +10,7 @@ datasource_URI = "https://verifier.globalnames.org/api/v1/data_sources"
 datasource_file_path = WORK_DIR / "Oceans1876" / "data_sources.json"
 url_template_file_path = WORK_DIR / "Oceans1876" / "uri_template.json"
 Data = list[dict]
+
 
 # Import JSON data
 def import_json(filename: pathlib.Path) -> Data:
@@ -26,7 +28,7 @@ def export_json(filename: pathlib.Path, output: Data) -> None:
         with open(filename, "w") as ojf:
             json.dump(output, ojf, indent=4)
     except Exception as e:
-        print(e.with_traceback())
+        print(e)
 
 
 def get_data_sources_from_uri(

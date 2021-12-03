@@ -1,7 +1,8 @@
 """
 This script handles the following:
 - Extract a subset of data from the `species.json` and `stations.json` files.
-- Load this data into separate `.json` files so that it can be used to create POSTGRES_TEST_DB
+- Load this data into separate `.json` files so that it can be used to
+create POSTGRES_TEST_DB
 """
 
 import json
@@ -42,7 +43,7 @@ def export_json(filename: pathlib.Path, output: Data) -> None:
         with open(filename, "w") as ojf:
             json.dump(output, ojf, indent=4)
     except Exception as e:
-        print(e.with_traceback())
+        print(e)
 
 
 def create_subset(
