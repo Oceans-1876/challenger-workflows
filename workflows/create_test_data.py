@@ -5,11 +5,11 @@ This script handles the following:
 create POSTGRES_TEST_DB
 """
 
-import json
 import pathlib
-import sys
 from datetime import datetime
 from typing import Union
+
+from utils import import_json, export_json
 
 # Type Definition
 Data = Union[dict, list[dict]]
@@ -22,28 +22,9 @@ stations_json = WORK_DIR / "Oceans1876" / "stations.json"
 output_species_json = WORK_DIR / "Oceans1876_subset" / "species.json"
 output_stations_json = WORK_DIR / "Oceans1876_subset" / "stations.json"
 
+(WORK_DIR / "Oceans1876_subset").mkdir(exist_ok=True)
 # Define Cardinality of the Stations subset.
 N_stations = 15
-
-
-# Import JSON data
-def import_json(filename: pathlib.Path) -> Data:
-    try:
-        with open(filename) as jf:
-            data = json.load(jf)
-        return data
-    except FileNotFoundError:
-        sys.exit(f"{filename} is missing")
-
-
-# Export JSON data
-def export_json(filename: pathlib.Path, output: Data) -> None:
-    try:
-        (WORK_DIR / "Oceans1876_subset").mkdir(exist_ok=True)
-        with open(filename, "w") as ojf:
-            json.dump(output, ojf, indent=4)
-    except Exception as e:
-        print(e)
 
 
 def create_subset(

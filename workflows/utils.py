@@ -1,9 +1,15 @@
+import json
 import logging
+import pathlib
 import re
 import subprocess
 import sys
+from typing import Union
 
 logger = logging.getLogger("Utils")
+
+# Define return type for json files
+Data = Union[dict, list[dict]]
 
 
 def check_gnames_app(app_name: str, min_version: float) -> str:
@@ -50,3 +56,22 @@ def check_gnames_app(app_name: str, min_version: float) -> str:
             f"The script is tested with {app_name} v{min_version}. "
             "Make sure you have the right version on your system."
         )
+
+
+# Import JSON data
+def import_json(filename: pathlib.Path) -> Data:
+    try:
+        with open(filename) as jf:
+            data = json.load(jf)
+        return data
+    except FileNotFoundError:
+        sys.exit(f"{filename} is missing")
+
+
+# Export JSON data
+def export_json(filename: pathlib.Path, output: Data) -> None:
+    try:
+        with open(filename, "w") as ojf:
+            json.dump(output, ojf, indent=4)
+    except Exception as e:
+        print(e)
