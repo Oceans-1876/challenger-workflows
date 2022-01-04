@@ -64,11 +64,21 @@ def get_species_status(species: dict, limit: int) -> dict:
                         "unacceptreason": sp[0]["unacceptreason"],
                         "outUrl": sp[0]["url"],
                         "scientificname": sp[0]["scientificname"],
-                        "isBrackish": sp[0]["isBrackish"],
-                        "isExtinct": sp[0]["isExtinct"],
-                        "isFreshwater": sp[0]["isFreshwater"],
-                        "isMarine": sp[0]["isMarine"],
-                        "isTerrestrial": sp[0]["isTerrestrial"],
+                        "isBrackish": sp[0]["isBrackish"]
+                        if sp[0]["isBrackish"] is not None
+                        else 0,
+                        "isExtinct": sp[0]["isExtinct"]
+                        if sp[0]["isExtinct"] is not None
+                        else 0,
+                        "isFreshwater": sp[0]["isFreshwater"]
+                        if sp[0]["isFreshwater"] is not None
+                        else 0,
+                        "isMarine": sp[0]["isMarine"]
+                        if sp[0]["isMarine"] is not None
+                        else 0,
+                        "isTerrestrial": sp[0]["isTerrestrial"]
+                        if sp[0]["isTerrestrial"] is not None
+                        else 0,
                         "multipleResultsexisted": True if len(sp) > 1 else False,
                     }
                     status_types_count[sp[0]["status"]] += 1
