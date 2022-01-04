@@ -1,9 +1,9 @@
-from collections import deque, defaultdict
 import pathlib
-import requests
+from collections import defaultdict, deque
 from typing import Union
-from utils import import_json, export_json
 
+import requests
+from utils import export_json, import_json
 
 WORK_DIR = pathlib.Path("../data")
 all_species_json = WORK_DIR / "Oceans1876" / "index_species_verified.json"

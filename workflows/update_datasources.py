@@ -1,7 +1,7 @@
 import pathlib
-import requests
 
-from utils import import_json, export_json
+import requests
+from utils import export_json, import_json
 
 WORK_DIR = pathlib.Path("../data")
 

@@ -9,7 +9,7 @@ import pathlib
 from datetime import datetime
 from typing import Union
 
-from utils import import_json, export_json
+from utils import export_json, import_json
 
 # Type Definition
 Data = Union[dict, list[dict]]
