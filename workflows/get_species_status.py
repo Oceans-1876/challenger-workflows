@@ -157,7 +157,8 @@ def get_vernaculars(species_status: dict) -> None:
     for i, sp in enumerate(species_status.values()):
         if sp:
             print(
-                f"Getting Species number {i + 1}'s common names. ID:{sp['valid_AphiaID']}"
+                f"Getting Species number {i + 1}'s common names. \
+                    ID:{sp['valid_AphiaID']}"
             )
             data = requests.get(vernacularsByAphiaID.format(sp["valid_AphiaID"]))
 
