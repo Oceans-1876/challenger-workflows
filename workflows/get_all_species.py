@@ -14,7 +14,7 @@ import sys
 import threading
 import time
 from enum import Enum
-from typing import Dict, List, Optional, Tuple, TypedDict, Union
+from typing import Dict, List, Optional, Tuple, TypedDict, Union, cast
 
 import cv2 as cv
 import numpy as np
@@ -154,6 +154,8 @@ GenusDict = TypedDict(
     },
 )
 
+Point = Tuple[int, int]
+
 
 class SpeciesProcessor:
     def __init__(self, debug: bool = False):
@@ -162,9 +164,9 @@ class SpeciesProcessor:
         self.species: List[GenusDict] = []
         self.species_verified: Dict[str, MatchedSpeciesDict] = {}
         self.unverified_lines: List[DebugDict] = []
-        self.species_verification_threads = []
+        self.species_verification_threads: List[threading.Thread] = []
 
-    def process(self):
+    def process(self) -> None:
         start_time = time.time()
 
         try:
@@ -338,11 +340,12 @@ class SpeciesProcessor:
     @staticmethod
     def get_contour_extremities(
         contour: np.ndarray,
-    ) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
-        leftmost = tuple(contour[contour[:, :, 0].argmin()][0])
-        topmost = tuple(contour[contour[:, :, 1].argmin()][0])
-        bottommost = tuple(contour[contour[:, :, 1].argmax()][0])
-        rightmost = tuple(contour[contour[:, :, 0].argmax()][0])
+    ) -> Tuple[Point, Point, Point, Point]:
+
+        leftmost: Point = tuple(contour[contour[:, :, 0].argmin()][0])  # type: ignore
+        topmost: Point = tuple(contour[contour[:, :, 1].argmin()][0])  # type: ignore
+        bottommost: Point = tuple(contour[contour[:, :, 1].argmax()][0])  # type: ignore
+        rightmost: Point = tuple(contour[contour[:, :, 0].argmax()][0])  # type: ignore
         return leftmost, topmost, bottommost, rightmost
 
     def process_column(
@@ -427,8 +430,9 @@ class SpeciesProcessor:
                         # Save the previous genus and its species and start a new one.
                         self.species.append(current_genus)
 
+                    genus_value = cast(str, processed_line["value"])
                     current_genus = GenusDict(
-                        genus=processed_line["value"],
+                        genus=genus_value,
                         synonym=processed_line["synonym"],
                         matched_species=None,
                         pages=processed_line["pages"],
@@ -448,13 +452,21 @@ class SpeciesProcessor:
 
                 elif processed_line["type"] == LineType.CONTINUATION:
                     debug_info["message"] = "genus_continuation"
-                    current_genus["pages"].extend(processed_line["pages"])
-                    current_genus["debug"]["texts"].append(processed_line["text"])
+                    if current_genus:
+                        current_genus["pages"].extend(processed_line["pages"])
+                        current_genus["debug"]["texts"].append(processed_line["text"])
+                    else:
+                        # This should never happen.
+                        logger.warning(
+                            "Genus continuation without current genus: "
+                            f"{processed_line}"
+                        )
 
                 elif processed_line["type"] == LineType.GENUS_SYNONYM:
                     debug_info["message"] = "genus_synonym"
+                    genus_value = cast(str, processed_line["value"])
                     current_genus_synonym = GenusSynonymDict(
-                        genus=processed_line["value"], debug=debug_info
+                        genus=genus_value, debug=debug_info
                     )
 
                 else:
@@ -477,41 +489,65 @@ class SpeciesProcessor:
                 debug_info["need_verification"] = processed_line["need_verification"]
 
                 if processed_line["type"] == LineType.SPECIES:
+                    species_value = cast(str, processed_line["value"])
                     species = SpeciesDict(
-                        species=processed_line["value"],
+                        species=species_value,
                         matched_species=None,
                         pages=processed_line["pages"],
                         genus_synonym=current_genus_synonym,
                         debug=debug_info,
                     )
-                    current_genus["species"].append(species)
+                    if current_genus:
+                        current_genus["species"].append(species)
 
-                    # Start species verification in a separate thread.
-                    thread = threading.Thread(
-                        target=self.verify_species,
-                        args=(
-                            f"{current_genus['genus']} {species['species']}",
-                            species,
-                        ),
-                    )
-                    thread.start()
-                    self.species_verification_threads.append(thread)
+                        # Start species verification in a separate thread.
+                        thread = threading.Thread(
+                            target=self.verify_species,
+                            args=(
+                                f"{current_genus['genus']} {species['species']}",
+                                species,
+                            ),
+                        )
+                        thread.start()
+                        self.species_verification_threads.append(thread)
+                    else:
+                        # This should never happen.
+                        logger.warning(
+                            "Current genus species without current genus: "
+                            f"{processed_line}"
+                        )
 
                 elif processed_line["type"] == LineType.CONTINUATION:
-                    if current_genus["species"]:
-                        species: SpeciesDict = current_genus["species"][-1]
-                        species["pages"].extend(processed_line["pages"])
-                        species["debug"]["texts"].append(processed_line["text"])
+                    if current_genus:
+                        if current_genus["species"]:
+                            current_genus_last_species: SpeciesDict = current_genus[
+                                "species"
+                            ][-1]
+                            current_genus_last_species["pages"].extend(
+                                processed_line["pages"]
+                            )
+                            current_genus_last_species["debug"]["texts"].append(
+                                processed_line["text"]
+                            )
+                        else:
+                            # This is a continuation of the previous genus
+                            # (still need to verify).
+                            current_genus["pages"].extend(processed_line["pages"])
+                            current_genus["debug"]["texts"].append(
+                                processed_line["text"]
+                            )
                     else:
-                        # This is a continuation of the previous genus
-                        # (still need to verify).
-                        current_genus["pages"].extend(processed_line["pages"])
-                        current_genus["debug"]["texts"].append(processed_line["text"])
+                        # This should never happen.
+                        logger.warning(
+                            "Genus/species continuation without current genus: "
+                            f"{processed_line}"
+                        )
 
                 elif processed_line["type"] == LineType.GENUS_SYNONYM:
                     debug_info["message"] = "genus_synonym"
+                    genus_value = cast(str, processed_line["value"])
                     current_genus_synonym = GenusSynonymDict(
-                        genus=processed_line["value"], debug=debug_info
+                        genus=genus_value, debug=debug_info
                     )
 
                 else:
@@ -620,7 +656,7 @@ class SpeciesProcessor:
         processed_line["type"] = LineType.ERROR
         return processed_line
 
-    def retry_text_processing(self):
+    def retry_text_processing(self) -> None:
         self.load_species()
 
         for genus in self.species:
@@ -635,7 +671,8 @@ class SpeciesProcessor:
                 debug_info["need_verification"] = processed_line["need_verification"]
 
                 if processed_line["type"] == LineType.GENUS:
-                    genus["genus"] = processed_line["value"]
+                    genus_value = cast(str, processed_line["value"])
+                    genus["genus"] = genus_value
                     genus["synonym"] = processed_line["synonym"]
                     genus["matched_species"] = None
                     genus["pages"] = processed_line["pages"]
@@ -657,20 +694,21 @@ class SpeciesProcessor:
             current_genus_synonym = None
 
             for species in genus["species"]:
-                debug_info: DebugDict = species["debug"]
+                species_debug_info: DebugDict = species["debug"]
                 species["pages"] = []
 
-                for extracted_text in debug_info["texts"]:
+                for extracted_text in species_debug_info["texts"]:
                     logger.info(f"\tProcessing species text: {extracted_text}")
                     processed_line = self.process_text(extracted_text, LineType.SPECIES)
 
-                    debug_info["message"] = "species"
-                    debug_info["need_verification"] = processed_line[
+                    species_debug_info["message"] = "species"
+                    species_debug_info["need_verification"] = processed_line[
                         "need_verification"
                     ]
 
                     if processed_line["type"] == LineType.SPECIES:
-                        species["species"] = processed_line["value"]
+                        species_value = cast(str, processed_line["value"])
+                        species["species"] = species_value
                         species["matched_species"] = None
                         species["pages"] = processed_line["pages"]
                         species["genus_synonym"] = current_genus_synonym
@@ -683,16 +721,17 @@ class SpeciesProcessor:
                         species["pages"].extend(processed_line["pages"])
 
                     elif processed_line["type"] == LineType.GENUS_SYNONYM:
-                        debug_info["message"] = "genus_synonym"
+                        species_debug_info["message"] = "genus_synonym"
+                        current_genus_synonym_value = cast(str, processed_line["value"])
                         current_genus_synonym = GenusSynonymDict(
-                            genus=processed_line["value"], debug=debug_info
+                            genus=current_genus_synonym_value, debug=species_debug_info
                         )
 
                     else:
                         logger.warning(
                             f"\t\tLine is not a species: {processed_line['text']}"
                         )
-                        debug_info["message"] = "invalid species line"
+                        species_debug_info["message"] = "invalid species line"
 
         self.save_species()
 
@@ -708,10 +747,10 @@ class SpeciesProcessor:
                 if result:
                     record_id = result.get("recordId")
                     if record_id:
-                        species["matched_species"] = record_id
+                        species["matched_species"] = record_id  # type: ignore
                         self.species_verified[record_id] = result
 
-    def retry_missing_verifications(self):
+    def retry_missing_verifications(self) -> None:
         self.load_species()
 
         total_processed = 0
@@ -736,7 +775,7 @@ class SpeciesProcessor:
 
         self.save_species()
 
-    def load_species(self):
+    def load_species(self) -> None:
         if not (OUTPUT_PATH / "index_species.json").exists():
             sys.exit(
                 "index_species.json does not exist. "
@@ -746,7 +785,7 @@ class SpeciesProcessor:
         with open(OUTPUT_PATH / "index_species.json", "r") as f:
             self.species = json.load(f)["species"]
 
-    def save_species(self, save_errors=False):
+    def save_species(self, save_errors: bool = False) -> None:
         for thread in self.species_verification_threads:
             thread.join()
 
@@ -773,7 +812,7 @@ class SpeciesProcessor:
         img: np.ndarray,
         text_contour: np.ndarray,
         text_contour_bbox: Tuple[int, int, int, int],
-    ):
+    ) -> None:
         img_debug = img.copy()
 
         # Draw the bounding rectangle around the main text blob (red).
