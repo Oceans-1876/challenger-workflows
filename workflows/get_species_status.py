@@ -1,6 +1,6 @@
 import pathlib
 from collections import defaultdict, deque
-from typing import Union
+from typing import Union, List, Dict
 
 import requests
 from utils import export_json, import_json
@@ -8,20 +8,50 @@ from utils import export_json, import_json
 WORK_DIR = pathlib.Path("../data")
 all_species_json = WORK_DIR / "Oceans1876" / "index_species_verified.json"
 index_species_status_json = WORK_DIR / "Oceans1876" / "index_species_status.json"
+missing_worms_species_from_irmng = WORK_DIR / "Oceans1876" / "missing_worms_species.json"
 
 # Define return type for json files
-Data = Union[dict, list[dict]]
+Data = Union[dict, List[dict]]
 
 index_species: Data = import_json(all_species_json)["species"]
 
-aphiaSynonymsByID_URI: str = "https://marinespecies.org/rest/AphiaSynonymsByAphiaID/{}"
-aphiaRecordsByID_URI: str = "https://marinespecies.org/rest/AphiaRecordByAphiaID/{}"
-aphiaRecordsByMatchNames: str = (
-    "https://marinespecies.org/rest/AphiaRecordsByMatchNames?"
-)
-vernacularsByAphiaID: str = (
-    "https://marinespecies.org/rest/AphiaVernacularsByAphiaID/{}"
-)
+API_URIS: Dict[str, Dict[str, str]] = {
+    "worms": {
+        "records_by_matched_names": "https://marinespecies.org/rest/AphiaRecordsByMatchNames?",
+        "records_by_id": "https://marinespecies.org/rest/AphiaRecordByAphiaID/{}",
+        "synonym_records_by_id": "https://marinespecies.org/rest/AphiaSynonymsByAphiaID/{}",
+        "vernacular_records_by_id": "https://marinespecies.org/rest/AphiaVernacularsByAphiaID/{}"
+    },
+    "irmng": {
+        "records_by_matched_names": "https://irmng.org/rest/AphiaRecordsByMatchNames?",
+        "records_by_id": "https://irmng.org/rest/AphiaRecordByIRMNG_ID/{}",
+        "synonym_records_by_id": "https://irmng.org/rest/AphiaSynonymsByIRMNG_ID/{}",
+        "vernacular_records_by_id": "https://irmng.org/rest/AphiaVernacularsByIRMNG_ID/{}"
+    }
+}
+
+API_INCOMING_KEY_NAMES: Dict[str, Dict[str, dict]] = {
+    "worms": {
+        "id": "AphiaID",
+        "valid_id": "valid_AphiaID",
+        "current_id": "currrentAphiaID"
+    },
+    "irmng": {
+        "id": "IRMNG_ID",
+        "valid_id": "valid_IRMNG_ID",
+        "current_id": "currrentIRMNG_ID"
+    },
+}
+
+API_OUTPUT_PATH: Dict[str, pathlib.Path] = {
+    "worms": index_species_status_json,
+    "irmng": missing_worms_species_from_irmng
+}
+
+# aphiaSynonymsByID_URI: str = "https://marinespecies.org/rest/AphiaSynonymsByAphiaID/{}"
+# aphiaRecordsByID_URI: str = "https://marinespecies.org/rest/AphiaRecordByAphiaID/{}"
+# aphiaRecordsByMatchNames: str = ("https://marinespecies.org/rest/AphiaRecordsByMatchNames?")
+# vernacularsByAphiaID: str = ("https://marinespecies.org/rest/AphiaVernacularsByAphiaID/{}")
 
 query_param = "scientificnames[]={}"
 
@@ -33,7 +63,7 @@ LIMIT = 0  # development testing
 print(f"Total Species Count: {len(index_species.keys())}")
 
 
-def get_species_status(species: dict, limit: int) -> dict:
+def get_species_status(species: dict, limit: int, URI: str, params: dict) -> dict:
     species_batch_list = deque()
     species_id_list = deque()
     status_types_count = defaultdict(int)
@@ -44,7 +74,7 @@ def get_species_status(species: dict, limit: int) -> dict:
         species_batch_list.append(query_param.format(species[s]["matchedName"]))
         species_id_list.append(s)
         if ((i != 0) and ((i + 1) % BATCH_SIZE == 0)) or (i == (len(sp_ids) - 1)):
-            new_URI = aphiaRecordsByMatchNames + "&".join(list(species_batch_list))
+            new_URI = URI + "&".join(list(species_batch_list))
             print("Number of species being requested now: ", len(species_batch_list))
             print(f"Progress: {i + 1 - BATCH_SIZE} species processed so far.")
             species_batch_list.clear()
@@ -58,8 +88,8 @@ def get_species_status(species: dict, limit: int) -> dict:
                 if len(sp) >= 1:
                     species_status[id] = {
                         "name": species[id]["matchedName"],
-                        "currentAphiaID": sp[0]["AphiaID"],
-                        "valid_AphiaID": sp[0]["valid_AphiaID"],
+                        params['current_id']: sp[0][params['id']],
+                        params["valid_id"]: sp[0][params["valid_id"]],
                         "status": sp[0]["status"],
                         "unacceptreason": sp[0]["unacceptreason"],
                         "outUrl": sp[0]["url"],
@@ -102,11 +132,11 @@ def get_species_status(species: dict, limit: int) -> dict:
     return species_status
 
 
-def get_accepted_species(species_status: dict) -> None:
+def get_accepted_species(species_status: dict, URI: str, params: dict) -> None:
     for i, sp in enumerate(species_status.values()):
         if sp and sp["status"] != "accepted":
             print(f"Getting data for species number: {i + 1}")
-            data = requests.get(aphiaRecordsByID_URI.format(sp["valid_AphiaID"]))
+            data = requests.get(URI.format(sp[params["valid_id"]]))
             if data.status_code == 200:
                 data = data.json()
             else:
@@ -115,7 +145,7 @@ def get_accepted_species(species_status: dict) -> None:
             print(f"Data received length: {len(data)}")
 
             valid_data = {
-                "AphiaID": data["AphiaID"],
+                params['current_id']: data[params['id']],
                 "url": data["url"],
                 "scientificname": data["scientificname"],
                 "authority": data["authority"],
@@ -127,11 +157,11 @@ def get_accepted_species(species_status: dict) -> None:
             sp["validSpeciesData"] = None
 
 
-def get_species_synonyms(species_status: dict) -> None:
+def get_species_synonyms(species_status: dict, URI: str, params: dict) -> None:
     for i, sp in enumerate(species_status.values()):
         if sp:
-            print(f"Getting Species {i + 1} Synonyms: ID: {sp['currentAphiaID']}")
-            data = requests.get(aphiaSynonymsByID_URI.format(sp["currentAphiaID"]))
+            print(f"Getting Species {i + 1} Synonyms: ID: {sp[params['current_id']]}")
+            data = requests.get(URI.format(sp[params["current_id"]]))
             if data.status_code == 200:
                 data = data.json()
             else:
@@ -142,7 +172,7 @@ def get_species_synonyms(species_status: dict) -> None:
             print(f"Data received length: {len(data)}")
             synonyms = [
                 {
-                    "AphiaID": syn["AphiaID"],
+                    params["id"]: syn[params["id"]],
                     "url": syn["url"],
                     "scientificname": syn["scientificname"],
                     "authority": syn["authority"],
@@ -153,27 +183,44 @@ def get_species_synonyms(species_status: dict) -> None:
             sp["moreSynonyms"] = True if len(data) == 50 else False
 
 
-def get_vernaculars(species_status: dict) -> None:
+def get_vernaculars(species_status: dict, URI: str, params: dict) -> None:
     for i, sp in enumerate(species_status.values()):
         if sp:
             print(
                 f"Getting Species number {i + 1}'s common names. \
-                    ID:{sp['valid_AphiaID']}"
+                    ID:{sp[params['valid_id']]}"
             )
-            data = requests.get(vernacularsByAphiaID.format(sp["valid_AphiaID"]))
+            data = requests.get(URI.format(sp[params['valid_id']]))
 
             sp["commonNames"] = data.json() if data.status_code == 200 else []
 
 
 if __name__ == "__main__":
-    species_status = get_species_status(index_species, LIMIT)
+    working_on: str = "irmng"
+    work_on_missing = True
+    # work_on_missing = False
 
-    # species_status = import_json(index_species_status_json)
+    URI: str = API_URIS[working_on]["records_by_matched_names"]
+    accepted_URI: str = API_URIS[working_on]["records_by_id"]
+    synonyms_URI: str = API_URIS[working_on]["synonym_records_by_id"]
+    vernaculars_URI: str = API_URIS[working_on]["vernacular_records_by_id"]
 
-    get_accepted_species(species_status["species"])
+    params: dict = API_INCOMING_KEY_NAMES[working_on]
+    # output_file_path: pathlib.Path = API_OUTPUT_PATH[working_on]
+    output_file_path: pathlib.Path = WORK_DIR / "Oceans1876" / "test.json"
+    # constructing data
+    if work_on_missing:
+        index_species_status = import_json(index_species_status_json)["species"]
+        index_species = dict([(key, index_species[key]) for key in index_species_status.keys() if index_species_status[key] == None])
+    print(f"Working on missing:{work_on_missing} with {working_on} datasource, with {len(index_species)} number of species.")
+    species_status = get_species_status(index_species, LIMIT, URI, params)
 
-    get_species_synonyms(species_status["species"])
+    #species_status = import_json(output_file_path)
 
-    get_vernaculars(species_status["species"])
+    get_accepted_species(species_status["species"], accepted_URI, params)
 
-    export_json(index_species_status_json, species_status)
+    get_species_synonyms(species_status["species"], synonyms_URI, params)
+
+    get_vernaculars(species_status["species"], vernaculars_URI, params)
+
+    export_json(output_file_path, species_status)
