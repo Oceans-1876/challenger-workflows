@@ -1,5 +1,5 @@
 """
-Extract all the species mentioned in the summary report index.
+Extracts the species mentioned in the summary report index.
 The index contains a list of all genus, their species, and all the pages they are
 mentioned in the summary reports.
 """

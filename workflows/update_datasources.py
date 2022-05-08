@@ -1,60 +1,67 @@
+import json
+import logging
 import pathlib
+from typing import Dict, Optional
 
 import requests
-from utils import export_json, import_json
+from pydantic import BaseModel, parse_file_as
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("Data Sources")
 
 WORK_DIR = pathlib.Path("../data")
 
-datasource_URI = "https://verifier.globalnames.org/api/v1/data_sources"
-datasource_file_path = WORK_DIR / "Oceans1876" / "data_sources.json"
-url_template_file_path = WORK_DIR / "Oceans1876" / "uri_template.json"
-Data = list[dict]
+DATASOURCE_URI = "https://verifier.globalnames.org/api/v1/data_sources"
+DATASOURCE_FILE_PATH = WORK_DIR / "Oceans1876" / "data_sources.json"
 
 
-def get_data_sources_from_uri(
-    datasource_URI: str, datasource_file_path: pathlib.Path
-) -> None:
+class DataSourceUrls(BaseModel):
+    aphiaRecordsByID: Optional[str]
+    aphiaRecordsByMatchNames: Optional[str]
+    aphiaSynonymsByID: Optional[str]
+    endpoint: Optional[str]
+    matchedCanonicalFull: Optional[str]
+    matchedCanonicalSimple: Optional[str]
+    matchedName: Optional[str]
+    web: Optional[str]
 
-    data_sources = requests.get(datasource_URI)
-    url_templates = import_json(url_template_file_path)
 
-    expected_fields = [
-        "id",
-        "title",
-        "titleShort",
-        "description",
-        "curation",
-        "recordCount",
-        "updatedAt",
-        "isOutlinkReady",
-        "homeURL",
-        "URL_template",
-    ]
-    if data_sources.status_code == 200:
-        data_sources_json = data_sources.json()
-        for data_source in data_sources_json:
-            for key in expected_fields:
-                if key not in data_source.keys():
-                    if key == "isOutlinkReady":
-                        data_source[key] = False
-                    elif key == "homeURL":
-                        data_source[key] = None
-                    elif key == "URL_template":
-                        data_source[key] = url_templates.get(
-                            str(data_source["id"]), None
-                        )
+class DataSource(BaseModel):
+    id: str
+    title: str
+    titleShort: str
+    curation: str
+    recordCount: int
+    updatedAt: str
+    urls: DataSourceUrls = {}
+    homeURL: Optional[str] = None
+    isOutlinkReady: bool = False
 
-            if key == "description":
-                if len(data_source[key]) <= 4:
-                    data_source[key] = None
 
-            if str(data_source["id"]) not in url_templates:
-                url_templates[str(data_source["id"])] = None
+def update_data_sources() -> None:
+    resp = requests.get(DATASOURCE_URI)
 
-        export_json(datasource_file_path, data_sources_json)
+    data_sources = parse_file_as(Dict[str, DataSource], DATASOURCE_FILE_PATH)
+
+    if resp.status_code == 200:
+        data_sources_dict = resp.json()
+        for ds in data_sources_dict:
+            if ds["id"] in data_sources:
+                for k, v in ds.items():
+                    setattr(data_sources[ds["id"]], k, v)
+
+        with open(DATASOURCE_FILE_PATH, "w") as f:
+            json.dump(
+                dict(map(lambda d: (d[0], d[1].dict()), data_sources.items())),
+                f,
+                indent=2,
+            )
+
     else:
-        print(f"Received Status code: {data_sources.status_code} from the GNAMES API")
+        logger.warning(
+            f"Received Status code: {data_sources.status_code} from the GNAMES API"
+        )
 
 
 if __name__ == "__main__":
-    get_data_sources_from_uri(datasource_URI, datasource_file_path)
+    update_data_sources()

@@ -1,9 +1,9 @@
 """
 This script handles the following:
-- Extract stations' text from the OCRed text by HathiTrust (`data/HathiTrust`)
-- Parse and verify species from the extracted stations' text
-- Attach the extract texts and species to the RAMM data (`data/RAMM/stations.csv`)
-- Saves the update RAMM data and all the extracted species in `data/Oceans1876`
+- Extracts stations' text from the OCRed text by HathiTrust (`data/HathiTrust`)
+- Parses and verifies species from the extracted stations' text
+- Attaches the extracted texts and species to the RAMM data (`data/RAMM/stations.csv`)
+- Saves the updated RAMM data and all the extracted species in `data/Oceans1876`
 """
 
 import datetime
@@ -139,8 +139,8 @@ RAMM_STATION_COLUMN_TYPES = {
 
 
 def run() -> None:
-    gnfinder_version = check_gnames_app("gnfinder", 0.16)
-    gnverifier_version = check_gnames_app("gnverifier", 0.6)
+    gnfinder_version = check_gnames_app("gnfinder", 0.19)
+    gnverifier_version = check_gnames_app("gnverifier", 0.9)
 
     # Load all columns as string, i.e. dtype="object"
     ramm_stations = pd.read_csv(WORK_DIR / "RAMM" / "stations.csv", dtype="object")
