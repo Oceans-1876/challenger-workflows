@@ -159,7 +159,7 @@ Point = Tuple[int, int]
 
 class SpeciesProcessor:
     def __init__(self, debug: bool = False):
-        self.gnverifier_version = check_gnames_app("gnverifier", 0.6)
+        self.gnverifier_version = check_gnames_app("gnverifier")
         self.debug = debug
         self.species: List[GenusDict] = []
         self.species_verified: Dict[str, MatchedSpeciesDict] = {}

@@ -139,8 +139,8 @@ RAMM_STATION_COLUMN_TYPES = {
 
 
 def run() -> None:
-    gnfinder_version = check_gnames_app("gnfinder", 0.19)
-    gnverifier_version = check_gnames_app("gnverifier", 0.9)
+    gnfinder_version = check_gnames_app("gnfinder")
+    gnverifier_version = check_gnames_app("gnverifier")
 
     # Load all columns as string, i.e. dtype="object"
     ramm_stations = pd.read_csv(WORK_DIR / "RAMM" / "stations.csv", dtype="object")

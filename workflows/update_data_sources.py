@@ -62,9 +62,7 @@ def update_data_sources() -> None:
             )
 
     else:
-        logger.warning(
-            f"Received Status code: {data_sources.status_code} from the GNAMES API"
-        )
+        logger.warning(f"Received Status code: {resp.status_code} from the GNAMES API")
 
 
 if __name__ == "__main__":

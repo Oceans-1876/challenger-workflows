@@ -11,8 +11,10 @@ logger = logging.getLogger("Utils")
 # Define return type for json files
 Data = Union[dict, list[dict]]
 
+GNAMES_VERSIONS = {"gnfinder": 0.19, "gnverifier": 0.9}
 
-def check_gnames_app(app_name: str, min_version: float) -> str:
+
+def check_gnames_app(app_name: str) -> str:
     """
     Check if the given gnames app exists on the system
     and its version is not less than min_version.
@@ -28,6 +30,8 @@ def check_gnames_app(app_name: str, min_version: float) -> str:
     -------
     version of the existing gnames app
     """
+    min_version = GNAMES_VERSIONS[app_name]
+
     try:
         version_text = subprocess.run(
             [app_name, "-V"], check=True, capture_output=True
