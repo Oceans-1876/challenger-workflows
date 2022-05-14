@@ -39,6 +39,10 @@ class DataSource(BaseModel):
 
 
 def update_data_sources() -> None:
+    """
+    Update the data sources file (`DATASOURCE_FILE_PATH`)
+    from Global Names API (`DATASOURCE_URI`).
+    """
     resp = requests.get(DATASOURCE_URI)
 
     data_sources = parse_file_as(Dict[str, DataSource], DATASOURCE_FILE_PATH)
