@@ -1,10 +1,10 @@
-from urllib import response
-from collections import defaultdict, deque
-import requests
-from utils import export_json, import_json
-from typing import Union
 import pathlib
+from collections import deque
+from typing import Union
+
+import requests
 from tqdm import tqdm
+from utils import export_json, import_json
 
 WORK_DIR = pathlib.Path("../data")
 all_spcs_json = WORK_DIR / "Oceans1876" / "index_species_verified.json"

@@ -1,6 +1,6 @@
 import pathlib
 from collections import defaultdict, deque
-from typing import Union, List, Dict
+from typing import Dict, List, Union
 
 import requests
 from utils import export_json, import_json
