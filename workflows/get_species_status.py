@@ -8,7 +8,9 @@ from utils import export_json, import_json
 WORK_DIR = pathlib.Path("../data")
 all_species_json = WORK_DIR / "Oceans1876" / "index_species_verified.json"
 index_species_status_json = WORK_DIR / "Oceans1876" / "index_species_status.json"
-missing_worms_species_from_irmng = WORK_DIR / "Oceans1876" / "missing_worms_species.json"
+missing_worms_species_from_irmng = (
+    WORK_DIR / "Oceans1876" / "missing_worms_species.json"
+)
 
 # Define return type for json files
 Data = Union[dict, List[dict]]
@@ -20,39 +22,36 @@ API_URIS: Dict[str, Dict[str, str]] = {
         "records_by_matched_names": "https://marinespecies.org/rest/AphiaRecordsByMatchNames?",
         "records_by_id": "https://marinespecies.org/rest/AphiaRecordByAphiaID/{}",
         "synonym_records_by_id": "https://marinespecies.org/rest/AphiaSynonymsByAphiaID/{}",
-        "vernacular_records_by_id": "https://marinespecies.org/rest/AphiaVernacularsByAphiaID/{}"
+        "vernacular_records_by_id": "https://marinespecies.org/rest/AphiaVernacularsByAphiaID/{}",
     },
     "irmng": {
         "records_by_matched_names": "https://irmng.org/rest/AphiaRecordsByMatchNames?",
         "records_by_id": "https://irmng.org/rest/AphiaRecordByIRMNG_ID/{}",
         "synonym_records_by_id": "https://irmng.org/rest/AphiaSynonymsByIRMNG_ID/{}",
-        "vernacular_records_by_id": "https://irmng.org/rest/AphiaVernacularsByIRMNG_ID/{}"
-    }
+        "vernacular_records_by_id": "https://irmng.org/rest/AphiaVernacularsByIRMNG_ID/{}",
+    },
 }
 
 API_INCOMING_KEY_NAMES: Dict[str, Dict[str, dict]] = {
     "worms": {
         "id": "AphiaID",
         "valid_id": "valid_AphiaID",
-        "current_id": "currrentAphiaID"
+        "current_id": "currrentAphiaID",
     },
     "irmng": {
         "id": "IRMNG_ID",
         "valid_id": "valid_IRMNG_ID",
-        "current_id": "currrentIRMNG_ID"
+        "current_id": "currrentIRMNG_ID",
     },
 }
 
 API_OUTPUT_PATH: Dict[str, pathlib.Path] = {
     "worms": index_species_status_json,
-    "irmng": missing_worms_species_from_irmng
+    "irmng": missing_worms_species_from_irmng,
 }
 
-# aphiaSynonymsByID_URI: str = "https://marinespecies.org/rest/AphiaSynonymsByAphiaID/{}"
-# aphiaRecordsByID_URI: str = "https://marinespecies.org/rest/AphiaRecordByAphiaID/{}"
-# aphiaRecordsByMatchNames: str = ("https://marinespecies.org/rest/AphiaRecordsByMatchNames?")
-# vernacularsByAphiaID: str = ("https://marinespecies.org/rest/AphiaVernacularsByAphiaID/{}")
 
+# Only used for WORMS API because we can batch our requests together.
 query_param = "scientificnames[]={}"
 
 BATCH_SIZE = (
@@ -88,7 +87,7 @@ def get_species_status(species: dict, limit: int, URI: str, params: dict) -> dic
                 if len(sp) >= 1:
                     species_status[id] = {
                         "name": species[id]["matchedName"],
-                        params['current_id']: sp[0][params['id']],
+                        params["current_id"]: sp[0][params["id"]],
                         params["valid_id"]: sp[0][params["valid_id"]],
                         "status": sp[0]["status"],
                         "unacceptreason": sp[0]["unacceptreason"],
@@ -145,7 +144,7 @@ def get_accepted_species(species_status: dict, URI: str, params: dict) -> None:
             print(f"Data received length: {len(data)}")
 
             valid_data = {
-                params['current_id']: data[params['id']],
+                params["current_id"]: data[params["id"]],
                 "url": data["url"],
                 "scientificname": data["scientificname"],
                 "authority": data["authority"],
@@ -190,7 +189,7 @@ def get_vernaculars(species_status: dict, URI: str, params: dict) -> None:
                 f"Getting Species number {i + 1}'s common names. \
                     ID:{sp[params['valid_id']]}"
             )
-            data = requests.get(URI.format(sp[params['valid_id']]))
+            data = requests.get(URI.format(sp[params["valid_id"]]))
 
             sp["commonNames"] = data.json() if data.status_code == 200 else []
 
@@ -207,15 +206,25 @@ if __name__ == "__main__":
 
     params: dict = API_INCOMING_KEY_NAMES[working_on]
     # output_file_path: pathlib.Path = API_OUTPUT_PATH[working_on]
-    output_file_path: pathlib.Path = WORK_DIR / "Oceans1876" / "test.json"
+    output_file_path: pathlib.Path = (
+        WORK_DIR / "Oceans1876" / "index_species_status_irmng.json"
+    )
     # constructing data
     if work_on_missing:
         index_species_status = import_json(index_species_status_json)["species"]
-        index_species = dict([(key, index_species[key]) for key in index_species_status.keys() if index_species_status[key] == None])
-    print(f"Working on missing:{work_on_missing} with {working_on} datasource, with {len(index_species)} number of species.")
+        index_species = dict(
+            [
+                (key, index_species[key])
+                for key in index_species_status.keys()
+                if index_species_status[key] == None
+            ]
+        )
+    print(
+        f"Working on missing:{work_on_missing} with {working_on} datasource, with {len(index_species)} number of species."
+    )
     species_status = get_species_status(index_species, LIMIT, URI, params)
 
-    #species_status = import_json(output_file_path)
+    # species_status = import_json(output_file_path)
 
     get_accepted_species(species_status["species"], accepted_URI, params)
 
