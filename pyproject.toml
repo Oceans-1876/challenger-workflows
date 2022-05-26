@@ -14,7 +14,7 @@ opencv-python = "~4.5"
 pandas = "~1.4"
 pytesseract = "~0.3"
 requests = "~2.27"
-pydantic = "^1.9.0"
+pydantic = "^1.9"
 
 [tool.poetry.dev-dependencies]
 pre-commit = "~2.19"

@@ -1,17 +1,15 @@
 import json
 import logging
-import pathlib
 import re
 import subprocess
 import sys
-from typing import Union
+from typing import Any
+
+from pydantic import BaseModel
 
 logger = logging.getLogger("Utils")
 
-# Define return type for json files
-Data = Union[dict, list[dict]]
-
-GNAMES_VERSIONS = {"gnfinder": 0.19, "gnverifier": 0.9}
+GNAMES_VERSIONS = {"gnfinder": 0.19, "gnverifier": 1.0}
 
 
 def check_gnames_app(app_name: str) -> str:
@@ -24,7 +22,6 @@ def check_gnames_app(app_name: str) -> str:
     Parameters
     ----------
     app_name: names of a Global Names (gnames) app
-    min_version: minimum version required by the script
 
     Returns
     -------
@@ -62,20 +59,20 @@ def check_gnames_app(app_name: str) -> str:
         )
 
 
-# Import JSON data
-def import_json(filename: pathlib.Path) -> Data:
-    try:
-        with open(filename) as jf:
-            data = json.load(jf)
-        return data
-    except FileNotFoundError:
-        sys.exit(f"{filename} is missing")
+def camelcase_to_snakecase(name: str) -> str:
+    """
+    Convert a camelcase string to snakecase.
+    """
+    s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
+    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
 
 
-# Export JSON data
-def export_json(filename: pathlib.Path, output: Data) -> None:
-    try:
-        with open(filename, "w") as ojf:
-            json.dump(output, ojf, indent=4)
-    except Exception as e:
-        print(e)
+class PydanticJSONEncoder(json.JSONEncoder):
+    """
+    Custom JSON encoder that converts pydantic models to dicts.
+    """
+
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, BaseModel):
+            return obj.dict()
+        return json.JSONEncoder.default(self, obj)

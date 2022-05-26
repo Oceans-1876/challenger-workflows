@@ -8,7 +8,7 @@ import json
 import pathlib
 from datetime import datetime
 
-WORK_DIR = pathlib.Path("../data")
+WORK_DIR = pathlib.Path("./data")
 INPUT_DIR = WORK_DIR / "Oceans1876"
 OUTPUT_DIR = WORK_DIR / "Oceans1876_test"
 
@@ -20,7 +20,7 @@ OUTPUT_SPECIES_JSON = OUTPUT_DIR / "species.json"
 OUTPUT_STATIONS_JSON = OUTPUT_DIR / "stations.json"
 
 
-def create_subset(stations_count=15) -> None:
+def create_subset(stations_count: int = 15) -> None:
     with open(SPECIES_JSON) as f:
         species_data = json.load(f)
 

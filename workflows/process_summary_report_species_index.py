@@ -4,7 +4,6 @@ The index contains a list of all genus, their species, and all the pages they ar
 mentioned in the summary reports.
 """
 import argparse
-import datetime
 import json
 import logging
 import pathlib
@@ -13,160 +12,71 @@ import subprocess
 import sys
 import threading
 import time
-from enum import Enum
-from typing import Dict, List, Optional, Tuple, TypedDict, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 import cv2 as cv
 import numpy as np
 import pytesseract
-from utils import check_gnames_app
+import requests
+from pydantic import ValidationError, parse_file_as
+
+from data.schemas.data_sources import DataSource, DataSources
+from data.schemas.species.cv import (
+    Point,
+    SpeciesIndexDebug,
+    SpeciesIndexLineType,
+    SpeciesIndexProcessedLine,
+)
+from data.schemas.species.global_names import GNMetadata
+from data.schemas.species.species import (
+    GNVerifierMatchedSpecies,
+    SpeciesCommonName,
+    SpeciesExtraInfo,
+    SpeciesRecord,
+    SpeciesSynonym,
+)
+from data.schemas.species.species_index import (
+    SpeciesIndexGenus,
+    SpeciesIndexGenusSynonym,
+    SpeciesIndexSpecies,
+    SpeciesIndexVerifiedJSON,
+    SpeciesIndexVerifiedJSONExtra,
+)
+
+from .utils import PydanticJSONEncoder, check_gnames_app
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-8s %(message)s")
 logger = logging.getLogger("Species Extractor")
 
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    "--debug",
-    action="store_true",
-    help="Saves processed images in `data/tmp` for visual inspection",
-)
-parser.add_argument(
-    "--process", action="store_true", help="Process the index and extract species"
-)
-parser.add_argument(
-    "--process-text",
-    action="store_true",
-    help="Process the extracted texts stored in index_species.json",
-)
-parser.add_argument(
-    "--verify-species",
-    action="store_true",
-    help="Verify species with missing matches",
-)
+WORK_DIR = pathlib.Path("./data")
+DATA_SOURCES_FILE_PATH = WORK_DIR / "Oceans1876" / "data_sources.json"
+DATA_PATH = WORK_DIR / "HathiTrust" / "sec.6 v.2" / "images"
+OUTPUT_PATH = WORK_DIR / "Oceans1876"
 
-DATA_PATH = pathlib.Path("../data/HathiTrust/sec.6 v.2/images/")
-OUTPUT_PATH = pathlib.Path("../data/Oceans1876/")
-
-DEBUG_OUTPUT_PATH = pathlib.Path("../data/tmp")
+DEBUG_OUTPUT_PATH = WORK_DIR / "tmp"
 if not DEBUG_OUTPUT_PATH.exists():
     DEBUG_OUTPUT_PATH.mkdir()
 
 
 INDEX_PAGES = range(739, 849)
 
-DebugDict = TypedDict(
-    "DebugDict",
-    {
-        "page": int,
-        "column": int,
-        "line": int,
-        "bounding_box": Tuple[int, int, int, int],
-        "texts": List[str],
-        "message": str,
-        "need_verification": bool,
-    },
-)
-
-
-class LineType(str, Enum):
-    GENUS = "genus"
-    GENUS_SYNONYM = "genus_synonym"
-    SPECIES = "species"
-    CONTINUATION = "continuation"
-    ERROR = "error"
-
-
-ProcessedLineDict = TypedDict(
-    "ProcessedLineDict",
-    {
-        "type": LineType,
-        "value": Optional[str],
-        "synonym": Optional[str],
-        "pages": List[int],
-        "text": str,
-        "need_verification": bool,
-    },
-)
-
-MatchedSpeciesScoreDict = TypedDict(
-    "MatchedSpeciesScoreDict",
-    {
-        "infraSpecificRankScore": int,
-        "fuzzyLessScore": int,
-        "curatedDataScore": int,
-        "authorMatchScore": int,
-        "acceptedNameScore": int,
-        "parsingQualityScore": int,
-    },
-)
-
-MatchedSpeciesDict = TypedDict(
-    "MatchedSpeciesDict",
-    {
-        "dataSourceId": int,
-        "dataSourceTitleShort": str,
-        "curation": str,
-        "recordId": str,
-        "outlink": str,
-        "entryDate": str,
-        "matchedName": str,
-        "matchedCardinality": int,
-        "matchedCanonicalSimple": str,
-        "matchedCanonicalFull": str,
-        "currentRecordId": str,
-        "currentName": str,
-        "currentCardinality": int,
-        "currentCanonicalSimple": str,
-        "currentCanonicalFull": str,
-        "isSynonym": bool,
-        "classificationPath": str,
-        "classificationRanks": str,
-        "classificationIds": str,
-        "editDistance": int,
-        "stemEditDistance": int,
-        "matchType": str,
-        "scoreDetails": MatchedSpeciesScoreDict,
-    },
-)
-
-GenusSynonymDict = TypedDict("GenusSynonymDict", {"genus": str, "debug": DebugDict})
-
-SpeciesDict = TypedDict(
-    "SpeciesDict",
-    {
-        "species": str,
-        "genus_synonym": Optional[GenusSynonymDict],
-        "matched_species": Optional[str],
-        "pages": List[int],
-        "debug": DebugDict,
-    },
-)
-
-GenusDict = TypedDict(
-    "GenusDict",
-    {
-        "genus": str,
-        "synonym": Optional[str],
-        "matched_species": Optional[str],
-        "pages": List[int],
-        "species": List[SpeciesDict],
-        "debug": DebugDict,
-    },
-)
-
-Point = Tuple[int, int]
+EXTRA_INFO_DATA_SOURCES = ["9", "181"]  # WoRMS  # IRMNG
 
 
 class SpeciesProcessor:
     def __init__(self, debug: bool = False):
         self.gnverifier_version = check_gnames_app("gnverifier")
         self.debug = debug
-        self.species: List[GenusDict] = []
-        self.species_verified: Dict[str, MatchedSpeciesDict] = {}
-        self.unverified_lines: List[DebugDict] = []
+        self.data_sources = parse_file_as(DataSources, DATA_SOURCES_FILE_PATH)
+        self.species: List[SpeciesIndexGenus] = []
+        self.species_verified: Dict[str, GNVerifierMatchedSpecies] = {}
+        self.species_verified_extra_metadata = {"missing": 0}
+        self.species_verified_extra: Dict[str, SpeciesExtraInfo] = {}
+        self.unverified_lines: List[SpeciesIndexDebug] = []
         self.species_verification_threads: List[threading.Thread] = []
+        self.species_extra_threads: List[threading.Thread] = []
 
-    def process(self) -> None:
+    def process_species(self) -> None:
         start_time = time.time()
 
         try:
@@ -333,7 +243,8 @@ class SpeciesProcessor:
         except Exception as e:
             logger.exception(e)
 
-        self.save_species(save_errors=True)
+        self.save_verified_species(save_errors=True)
+        self.save_verified_species_extra()
 
         logger.info(f"Total processing time: {time.time() - start_time}")
 
@@ -400,7 +311,7 @@ class SpeciesProcessor:
                 # Contours with height less than 10 are noise.
                 continue
 
-            debug_info = DebugDict(
+            debug_info = SpeciesIndexDebug(
                 texts=[],
                 page=page_number,
                 column=column_number,
@@ -419,23 +330,25 @@ class SpeciesProcessor:
                 # If the contour start x is less than 2/3 of the start column,
                 # it's a genus. 2/3 is a safe value for this purpose.
                 extracted_text = self.process_line(column_denoised[c_y : c_y + c_h, :])
-                processed_line = self.process_text(extracted_text, LineType.GENUS)
+                processed_line = self.process_text(
+                    extracted_text, SpeciesIndexLineType.GENUS
+                )
 
-                debug_info["texts"].append(processed_line["text"])
-                debug_info["message"] = "genus"
-                debug_info["need_verification"] = processed_line["need_verification"]
+                debug_info.texts.append(processed_line.text)
+                debug_info.message = "genus"
+                debug_info.need_verification = processed_line.need_verification
 
-                if processed_line["type"] == LineType.GENUS:
+                if processed_line.type == SpeciesIndexLineType.GENUS:
                     if current_genus:
                         # Save the previous genus and its species and start a new one.
                         self.species.append(current_genus)
 
-                    genus_value = cast(str, processed_line["value"])
-                    current_genus = GenusDict(
+                    genus_value = cast(str, processed_line.value)
+                    current_genus = SpeciesIndexGenus(
                         genus=genus_value,
-                        synonym=processed_line["synonym"],
+                        synonym=processed_line.synonym,
                         matched_species=None,
-                        pages=processed_line["pages"],
+                        pages=processed_line.pages,
                         species=[],
                         debug=debug_info,
                     )
@@ -443,18 +356,18 @@ class SpeciesProcessor:
                     # Start genus verification in a separate thread.
                     thread = threading.Thread(
                         target=self.verify_species,
-                        args=(current_genus["genus"], current_genus),
+                        args=(current_genus.genus, current_genus),
                     )
                     thread.start()
                     self.species_verification_threads.append(thread)
 
                     current_genus_synonym = None
 
-                elif processed_line["type"] == LineType.CONTINUATION:
-                    debug_info["message"] = "genus_continuation"
+                elif processed_line.type == SpeciesIndexLineType.CONTINUATION:
+                    debug_info.message = "genus_continuation"
                     if current_genus:
-                        current_genus["pages"].extend(processed_line["pages"])
-                        current_genus["debug"]["texts"].append(processed_line["text"])
+                        current_genus.pages.extend(processed_line.pages)
+                        current_genus.debug.texts.append(processed_line.text)
                     else:
                         # This should never happen.
                         logger.warning(
@@ -462,16 +375,16 @@ class SpeciesProcessor:
                             f"{processed_line}"
                         )
 
-                elif processed_line["type"] == LineType.GENUS_SYNONYM:
-                    debug_info["message"] = "genus_synonym"
-                    genus_value = cast(str, processed_line["value"])
-                    current_genus_synonym = GenusSynonymDict(
+                elif processed_line.type == SpeciesIndexLineType.GENUS_SYNONYM:
+                    debug_info.message = "genus_synonym"
+                    genus_value = cast(str, processed_line.value)
+                    current_genus_synonym = SpeciesIndexGenusSynonym(
                         genus=genus_value, debug=debug_info
                     )
 
                 else:
-                    logger.warning(f"\t\tLine is not a genus: {processed_line['text']}")
-                    debug_info["message"] = "invalid genus line"
+                    logger.warning(f"\t\tLine is not a genus: {processed_line.text}")
+                    debug_info.message = "invalid genus line"
                     self.unverified_lines.append(debug_info)
 
             else:
@@ -482,29 +395,31 @@ class SpeciesProcessor:
 
                 # Otherwise, it's a species, or continuation of previous genus.
                 extracted_text = self.process_line(column_denoised[c_y : c_y + c_h, :])
-                processed_line = self.process_text(extracted_text, LineType.SPECIES)
+                processed_line = self.process_text(
+                    extracted_text, SpeciesIndexLineType.SPECIES
+                )
 
-                debug_info["texts"].append(processed_line["text"])
-                debug_info["message"] = "species"
-                debug_info["need_verification"] = processed_line["need_verification"]
+                debug_info.texts.append(processed_line.text)
+                debug_info.message = "species"
+                debug_info.need_verification = processed_line.need_verification
 
-                if processed_line["type"] == LineType.SPECIES:
-                    species_value = cast(str, processed_line["value"])
-                    species = SpeciesDict(
+                if processed_line.type == SpeciesIndexLineType.SPECIES:
+                    species_value = cast(str, processed_line.value)
+                    species = SpeciesIndexSpecies(
                         species=species_value,
                         matched_species=None,
-                        pages=processed_line["pages"],
+                        pages=processed_line.pages,
                         genus_synonym=current_genus_synonym,
                         debug=debug_info,
                     )
                     if current_genus:
-                        current_genus["species"].append(species)
+                        current_genus.species.append(species)
 
                         # Start species verification in a separate thread.
                         thread = threading.Thread(
                             target=self.verify_species,
                             args=(
-                                f"{current_genus['genus']} {species['species']}",
+                                f"{current_genus.genus} {species.species}",
                                 species,
                             ),
                         )
@@ -517,25 +432,23 @@ class SpeciesProcessor:
                             f"{processed_line}"
                         )
 
-                elif processed_line["type"] == LineType.CONTINUATION:
+                elif processed_line.type == SpeciesIndexLineType.CONTINUATION:
                     if current_genus:
-                        if current_genus["species"]:
-                            current_genus_last_species: SpeciesDict = current_genus[
-                                "species"
-                            ][-1]
-                            current_genus_last_species["pages"].extend(
-                                processed_line["pages"]
+                        if current_genus.species:
+                            current_genus_last_species: SpeciesIndexSpecies = (
+                                current_genus.species[-1]
                             )
-                            current_genus_last_species["debug"]["texts"].append(
-                                processed_line["text"]
+                            current_genus_last_species.pages.extend(
+                                processed_line.pages
+                            )
+                            current_genus_last_species.debug.texts.append(
+                                processed_line.text
                             )
                         else:
                             # This is a continuation of the previous genus
                             # (still need to verify).
-                            current_genus["pages"].extend(processed_line["pages"])
-                            current_genus["debug"]["texts"].append(
-                                processed_line["text"]
-                            )
+                            current_genus.pages.extend(processed_line.pages)
+                            current_genus.debug.texts.append(processed_line.text)
                     else:
                         # This should never happen.
                         logger.warning(
@@ -543,18 +456,18 @@ class SpeciesProcessor:
                             f"{processed_line}"
                         )
 
-                elif processed_line["type"] == LineType.GENUS_SYNONYM:
-                    debug_info["message"] = "genus_synonym"
-                    genus_value = cast(str, processed_line["value"])
-                    current_genus_synonym = GenusSynonymDict(
+                elif processed_line.type == SpeciesIndexLineType.GENUS_SYNONYM:
+                    debug_info.message = "genus_synonym"
+                    genus_value = cast(str, processed_line.value)
+                    current_genus_synonym = SpeciesIndexGenusSynonym(
                         genus=genus_value, debug=debug_info
                     )
 
                 else:
                     logger.warning(
-                        f"\t\tLine {idx+1} is not a species: {processed_line['text']}"
+                        f"\t\tLine {idx+1} is not a species: {processed_line.text}"
                     )
-                    debug_info["message"] = "invalid species line"
+                    debug_info.message = "invalid species line"
                     self.unverified_lines.append(debug_info)
 
         if current_genus:
@@ -580,8 +493,10 @@ class SpeciesProcessor:
             .replace("\u2019", "")
         )
 
-    def process_text(self, text: str, line_type: LineType) -> ProcessedLineDict:
-        processed_line = ProcessedLineDict(
+    def process_text(
+        self, text: str, line_type: SpeciesIndexLineType
+    ) -> SpeciesIndexProcessedLine:
+        processed_line = SpeciesIndexProcessedLine(
             type=line_type,
             value=None,
             synonym=None,
@@ -591,15 +506,15 @@ class SpeciesProcessor:
         )
 
         if not text:
-            processed_line["type"] = LineType.ERROR
+            processed_line.type = SpeciesIndexLineType.ERROR
             return processed_line
 
         # Double-check the given line type by looking at the first character.
         # Genus starts with an uppercase letter,
         # while species starts with a lowercase letter.
-        if line_type == LineType.GENUS:
+        if line_type == SpeciesIndexLineType.GENUS:
             first_char_is_verified = text[0].isupper()
-        elif line_type == LineType.SPECIES:
+        elif line_type == SpeciesIndexLineType.SPECIES:
             first_char_is_verified = text[0].islower()
             if not first_char_is_verified and text[0].isupper() and len(text) > 1:
                 # It's possible that the first character was recognized incorrectly
@@ -608,8 +523,8 @@ class SpeciesProcessor:
                 # if it finds a match, either exact or fuzzy.
                 text = text[0].lower() + text[1:]
                 first_char_is_verified = True
-                processed_line["text"] = text
-                processed_line["need_verification"] = True
+                processed_line.text = text
+                processed_line.need_verification = True
         else:
             raise ValueError(f"Unknown line type: {line_type}")
 
@@ -621,27 +536,27 @@ class SpeciesProcessor:
                 re.I,
             )
             if line_matches:
-                processed_line["type"] = line_type
-                processed_line["value"] = line_matches.group("value")
+                processed_line.type = line_type
+                processed_line.value = line_matches.group("value")
                 rest = line_matches.group("rest")
                 if rest:
                     rest_matches = re.search(
                         r"\(see (?P<synonym>[a-z\u00C0-\u024F]*)\)", rest, re.I
                     )
                     if rest_matches:
-                        processed_line["synonym"] = rest_matches.group("synonym")
+                        processed_line.synonym = rest_matches.group("synonym")
 
-                    processed_line["pages"] = re.findall(r"\d+", rest)
+                    processed_line.pages = re.findall(r"\d+", rest)
 
                 return processed_line
 
-        if line_type == LineType.SPECIES and text[0].isupper():
+        if line_type == SpeciesIndexLineType.SPECIES and text[0].isupper():
             return processed_line
 
         elif text[0].isdigit():
             # The line is continuation of pages for the previous value.
-            processed_line["type"] = LineType.CONTINUATION
-            processed_line["pages"] = re.findall(r"\d+", text)
+            processed_line.type = SpeciesIndexLineType.CONTINUATION
+            processed_line.pages = re.findall(r"\d+", text)
             return processed_line
 
         elif text[0] == "(" and len(text) > 1 and text[1].isupper():
@@ -649,93 +564,97 @@ class SpeciesProcessor:
             # Check for the value in parentheses.
             line_matches = re.search(r"\((?P<value>[A-Z][a-z\u00C0-\u024F]+)\)", text)
             if line_matches:
-                processed_line["type"] = LineType.GENUS_SYNONYM
-                processed_line["value"] = line_matches.group("value")
+                processed_line.type = SpeciesIndexLineType.GENUS_SYNONYM
+                processed_line.value = line_matches.group("value")
                 return processed_line
 
-        processed_line["type"] = LineType.ERROR
+        processed_line.type = SpeciesIndexLineType.ERROR
         return processed_line
 
     def retry_text_processing(self) -> None:
         self.load_species()
 
         for genus in self.species:
-            debug_info: DebugDict = genus["debug"]
-            genus["pages"] = []
+            debug_info: SpeciesIndexDebug = genus.debug
+            genus.pages = []
 
-            for extracted_text in debug_info["texts"]:
+            for extracted_text in debug_info.texts:
                 logger.info(f"Processing genus text: {extracted_text}")
-                processed_line = self.process_text(extracted_text, LineType.GENUS)
+                processed_line = self.process_text(
+                    extracted_text, SpeciesIndexLineType.GENUS
+                )
 
-                debug_info["message"] = "genus"
-                debug_info["need_verification"] = processed_line["need_verification"]
+                debug_info.message = "genus"
+                debug_info.need_verification = processed_line.need_verification
 
-                if processed_line["type"] == LineType.GENUS:
-                    genus_value = cast(str, processed_line["value"])
-                    genus["genus"] = genus_value
-                    genus["synonym"] = processed_line["synonym"]
-                    genus["matched_species"] = None
-                    genus["pages"] = processed_line["pages"]
+                if processed_line.type == SpeciesIndexLineType.GENUS:
+                    genus_value = cast(str, processed_line.value)
+                    genus.genus = genus_value
+                    genus.synonym = processed_line.synonym
+                    genus.matched_species = None
+                    genus.pages = processed_line.pages
 
-                    self.verify_species(genus["genus"], genus)
+                    self.verify_species(genus.genus, genus)
 
-                elif processed_line["type"] == LineType.CONTINUATION:
-                    debug_info["message"] = "genus_continuation"
-                    genus["pages"].extend(processed_line["pages"])
+                elif processed_line.type == SpeciesIndexLineType.CONTINUATION:
+                    debug_info.message = "genus_continuation"
+                    genus.pages.extend(processed_line.pages)
 
-                elif processed_line["type"] == LineType.GENUS_SYNONYM:
-                    debug_info["message"] = "genus_synonym"
-                    genus["synonym"] = processed_line["synonym"]
+                elif processed_line.type == SpeciesIndexLineType.GENUS_SYNONYM:
+                    debug_info.message = "genus_synonym"
+                    genus.synonym = processed_line.synonym
 
                 else:
-                    logger.warning(f"\t\tLine is not a genus: {processed_line['text']}")
-                    debug_info["message"] = "invalid genus line"
+                    logger.warning(f"\t\tLine is not a genus: {processed_line.text}")
+                    debug_info.message = "invalid genus line"
 
             current_genus_synonym = None
 
-            for species in genus["species"]:
-                species_debug_info: DebugDict = species["debug"]
-                species["pages"] = []
+            for species in genus.species:
+                species_debug_info: SpeciesIndexDebug = species.debug
+                species.pages = []
 
-                for extracted_text in species_debug_info["texts"]:
+                for extracted_text in species_debug_info.texts:
                     logger.info(f"\tProcessing species text: {extracted_text}")
-                    processed_line = self.process_text(extracted_text, LineType.SPECIES)
+                    processed_line = self.process_text(
+                        extracted_text, SpeciesIndexLineType.SPECIES
+                    )
 
-                    species_debug_info["message"] = "species"
-                    species_debug_info["need_verification"] = processed_line[
-                        "need_verification"
-                    ]
+                    species_debug_info.message = "species"
+                    species_debug_info.need_verification = (
+                        processed_line.need_verification
+                    )
 
-                    if processed_line["type"] == LineType.SPECIES:
-                        species_value = cast(str, processed_line["value"])
-                        species["species"] = species_value
-                        species["matched_species"] = None
-                        species["pages"] = processed_line["pages"]
-                        species["genus_synonym"] = current_genus_synonym
+                    if processed_line.type == SpeciesIndexLineType.SPECIES:
+                        species_value = cast(str, processed_line.value)
+                        species.species = species_value
+                        species.matched_species = None
+                        species.pages = processed_line.pages
+                        species.genus_synonym = current_genus_synonym
 
-                        self.verify_species(
-                            f"{genus['genus']} {species['species']}", species
-                        )
+                        self.verify_species(f"{genus.genus} {species.species}", species)
 
-                    elif processed_line["type"] == LineType.CONTINUATION:
-                        species["pages"].extend(processed_line["pages"])
+                    elif processed_line.type == SpeciesIndexLineType.CONTINUATION:
+                        species.pages.extend(processed_line.pages)
 
-                    elif processed_line["type"] == LineType.GENUS_SYNONYM:
-                        species_debug_info["message"] = "genus_synonym"
-                        current_genus_synonym_value = cast(str, processed_line["value"])
-                        current_genus_synonym = GenusSynonymDict(
+                    elif processed_line.type == SpeciesIndexLineType.GENUS_SYNONYM:
+                        species_debug_info.message = "genus_synonym"
+                        current_genus_synonym_value = cast(str, processed_line.value)
+                        current_genus_synonym = SpeciesIndexGenusSynonym(
                             genus=current_genus_synonym_value, debug=species_debug_info
                         )
 
                     else:
                         logger.warning(
-                            f"\t\tLine is not a species: {processed_line['text']}"
+                            f"\t\tLine is not a species: {processed_line.text}"
                         )
-                        species_debug_info["message"] = "invalid species line"
+                        species_debug_info.message = "invalid species line"
 
-        self.save_species()
+        self.save_verified_species()
 
-    def verify_species(self, name: str, species: Union[GenusDict, SpeciesDict]) -> None:
+    def verify_species(
+        self, name: str, species: Union[SpeciesIndexGenus, SpeciesIndexSpecies]
+    ) -> None:
         with subprocess.Popen(
             ["gnverifier", "-f", "compact", name],
             stdout=subprocess.PIPE,
@@ -747,8 +666,153 @@ class SpeciesProcessor:
                 if result:
                     record_id = result.get("recordId")
                     if record_id:
-                        species["matched_species"] = record_id  # type: ignore
-                        self.species_verified[record_id] = result
+                        species.matched_species = record_id  # type: ignore
+                        self.species_verified[record_id] = GNVerifierMatchedSpecies(
+                            **result
+                        )
+                        thread = threading.Thread(
+                            target=self.get_verified_species_extra,
+                            args=(self.species_verified[record_id],),
+                        )
+                        thread.start()
+                        self.species_extra_threads.append(thread)
+
+    def prepare_data_source_url(
+        self,
+        species: GNVerifierMatchedSpecies,
+        record: Optional[SpeciesRecord],
+        data_source: DataSource,
+        url_name: str,
+    ) -> Optional[str]:
+        query_params = []
+        format_params = {}
+        if url_name in data_source.urls_params:
+            query_params_config = data_source.urls_params[url_name]
+            for config in query_params_config:
+                if config.source == "species":
+                    source: Union[GNVerifierMatchedSpecies, SpeciesRecord] = species
+                elif config.source == "record":
+                    if not record:
+                        return None
+                    source = record
+                else:
+                    raise ValueError(f"Unknown source: {config.source}")
+
+                if config.type == "query":
+                    query_params.append(
+                        f"{config.attr}={getattr(source, config.source_key)}"
+                    )
+                elif config.type == "path":
+                    format_params[config.attr] = getattr(source, config.source_key)
+
+        query_params_str = "&".join(query_params)
+        base_url = getattr(data_source.urls, url_name).format(**format_params)
+
+        if query_params_str:
+            return f"{base_url}?{query_params_str}"
+
+        return base_url
+
+    def get_verified_species_extra(self, species: GNVerifierMatchedSpecies) -> None:
+        logger.info(f"Getting extra data for {species.recordId}")
+        species_extra_info = SpeciesExtraInfo()
+
+        for data_source_id in EXTRA_INFO_DATA_SOURCES:
+            data_source = self.data_sources[data_source_id]
+
+            def data_to_species_record(d: Dict[str, Any]) -> Optional[SpeciesRecord]:
+                if not d["scientificname"]:
+                    return None
+                if data_source.url_attrs_mapping.id in d:
+                    d["id"] = d[data_source.url_attrs_mapping.id]
+                    del d[data_source.url_attrs_mapping.id]
+                if data_source.url_attrs_mapping.valid_id in d:
+                    d["valid_id"] = d[data_source.url_attrs_mapping.valid_id]
+                    del d[data_source.url_attrs_mapping.valid_id]
+                return SpeciesRecord(**d)
+
+            def data_to_species_synonym(d: Dict[str, Any]) -> SpeciesSynonym:
+                if data_source.url_attrs_mapping.id in d:
+                    d["id"] = d[data_source.url_attrs_mapping.id]
+                    del d[data_source.url_attrs_mapping.id]
+                return SpeciesSynonym(**d)
+
+            records_url = self.prepare_data_source_url(
+                species, None, data_source, "records_by_match_names"
+            )
+
+            if not records_url:
+                continue
+
+            resp = requests.get(records_url)
+            if resp.status_code == 200:
+                data = resp.json()
+                if len(data):
+                    try:
+
+                        def sag(d: Optional[SpeciesRecord]) -> bool:
+                            return True if d else False
+
+                        species_extra_info.records = [
+                            record
+                            for record in map(data_to_species_record, data[0])
+                            if record is not None
+                        ]
+                    except ValidationError as e:
+                        logger.warning(
+                            f"Failed to parse record for {species.recordId}: {data}"
+                        )
+                        raise e
+                    accepted_record = next(
+                        filter(
+                            lambda sp: sp.status == "accepted",
+                            species_extra_info.records,
+                        ),
+                        None,
+                    )
+
+                    if accepted_record:
+                        synonyms_url = self.prepare_data_source_url(
+                            species,
+                            accepted_record,
+                            data_source,
+                            "synonyms_by_id",
+                        )
+                        if synonyms_url:
+                            resp = requests.get(synonyms_url)
+                            if resp.status_code == 200:
+                                data = resp.json()
+                                if len(data):
+                                    species_extra_info.synonyms = list(
+                                        map(data_to_species_synonym, data)
+                                    )
+
+                        vernaculars_url = self.prepare_data_source_url(
+                            species,
+                            accepted_record,
+                            data_source,
+                            "vernaculars_by_id",
+                        )
+                        if vernaculars_url:
+                            resp = requests.get(vernaculars_url)
+                            if resp.status_code == 200:
+                                data = resp.json()
+                                if len(data):
+                                    species_extra_info.common_names = list(
+                                        map(lambda sp: SpeciesCommonName(**sp), data)
+                                    )
+                    else:
+                        logger.warning(f"No accepted record for {species.recordId}")
+
+                    break
+            else:
+                logger.warning(
+                    f"{species.recordId} - {data_source_id} - {resp.text} - {resp.text}"
+                )
+        if not species_extra_info.records:
+            self.species_verified_extra_metadata["missing"] += 1
+
+        self.species_verified_extra[species.recordId] = species_extra_info
 
     def retry_missing_verifications(self) -> None:
         self.load_species()
@@ -756,24 +820,44 @@ class SpeciesProcessor:
         total_processed = 0
 
         for genus in self.species:
-            if not genus["matched_species"]:
-                logger.info(f"Verifying {genus['genus']}")
-                self.verify_species(genus["genus"], genus)
-                if genus["matched_species"]:
+            if not genus.matched_species:
+                logger.info(f"Verifying {genus.genus}")
+                self.verify_species(genus.genus, genus)
+                if genus.matched_species:
                     total_processed += 1
 
-                for species in genus["species"]:
-                    if not species["matched_species"]:
-                        logger.info(f"Verifying {genus['genus']} {species['species']}")
-                        self.verify_species(
-                            f"{genus['genus']} {species['species']}", species
-                        )
-                        if species["matched_species"]:
+                for species in genus.species:
+                    if not species.matched_species:
+                        logger.info(f"Verifying {genus.genus} {species.species}")
+                        self.verify_species(f"{genus.genus} {species.species}", species)
+                        if species.matched_species:
                             total_processed += 1
 
         logger.info(f"Retried {total_processed} species.")
 
-        self.save_species()
+        self.save_verified_species()
+
+    def retry_verified_species_extra(self) -> None:
+        self.load_verified_species()
+        self.species_verified_extra = parse_file_as(
+            SpeciesIndexVerifiedJSONExtra,
+            OUTPUT_PATH / "index_species_verified_extra.json",
+        ).species
+
+        try:
+            for species in self.species_verified.values():
+                if species.recordId not in self.species_verified_extra:
+                    self.get_verified_species_extra(species)
+                # thread = threading.Thread(
+                #     target=self.get_verified_species_extra,
+                #     args=(species,),
+                # )
+                # thread.start()
+                # self.species_extra_threads.append(thread)
+        except Exception as e:
+            logger.exception(e)
+
+        self.save_verified_species_extra()
 
     def load_species(self) -> None:
         if not (OUTPUT_PATH / "index_species.json").exists():
@@ -785,26 +869,51 @@ class SpeciesProcessor:
         with open(OUTPUT_PATH / "index_species.json", "r") as f:
             self.species = json.load(f)["species"]
 
-    def save_species(self, save_errors: bool = False) -> None:
+    def load_verified_species(self) -> None:
+        self.species_verified = parse_file_as(
+            SpeciesIndexVerifiedJSON, OUTPUT_PATH / "index_species_verified.json"
+        ).species
+
+    def save_verified_species(self, save_errors: bool = False) -> None:
         for thread in self.species_verification_threads:
             thread.join()
 
-        metadata = {
-            "gnverifier": self.gnverifier_version,
-            "date": str(datetime.datetime.now()),
-        }
+        metadata = GNMetadata(gnverifier=self.gnverifier_version)
 
         with open(OUTPUT_PATH / "index_species.json", "w") as f:
-            json.dump({"metadata": metadata, "species": self.species}, f, indent=2)
+            json.dump(
+                {"metadata": metadata, "species": self.species},
+                f,
+                indent=2,
+                cls=PydanticJSONEncoder,
+            )
 
         with open(OUTPUT_PATH / "index_species_verified.json", "w") as f:
             json.dump(
-                {"metadata": metadata, "species": self.species_verified}, f, indent=2
+                {"metadata": metadata, "species": self.species_verified},
+                f,
+                indent=2,
+                cls=PydanticJSONEncoder,
             )
 
         if save_errors:
             with open(OUTPUT_PATH / "index_species_errors.json", "w") as f:
-                json.dump(self.unverified_lines, f, indent=2)
+                json.dump(self.unverified_lines, f, indent=2, cls=PydanticJSONEncoder)
+
+    def save_verified_species_extra(self) -> None:
+        for thread in self.species_extra_threads:
+            thread.join()
+
+        with open(OUTPUT_PATH / "index_species_verified_extra.json", "w") as f:
+            json.dump(
+                {
+                    "metadata": self.species_verified_extra_metadata,
+                    "species": self.species_verified_extra,
+                },
+                f,
+                indent=2,
+                cls=PydanticJSONEncoder,
+            )
 
     def save_intermediate_images(
         self,
@@ -842,19 +951,47 @@ class SpeciesProcessor:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Saves processed images in `data/tmp` for visual inspection",
+    )
+    parser_subcommands = parser.add_subparsers(dest="subcommand")
+    parser_subcommands.add_parser(
+        "process-species", help="Process the index and extract species"
+    )
+    parser_subcommands.add_parser(
+        "process-text",
+        help="Process the extracted texts stored in index_species.json",
+    )
+    parser_subcommands.add_parser(
+        "verify-species",
+        help="Verify species with missing matches",
+    )
+    species_extra_args = parser_subcommands.add_parser(
+        "species-extra",
+        help="Get verified species extra info",
+    )
+    # species_extra_args.add_argument(
+    #     "--missing",
+    #     action="store_true",
+    #     help="Only get data for species without extra info",
+    # )
+
     args = parser.parse_args()
+    command = args.subcommand
 
     if args.debug:
         logger.setLevel(logging.DEBUG)
 
-    if not args.process and not args.process_text and not args.verify_species:
+    if not command:
         parser.print_help()
-    else:
-        if args.process:
-            SpeciesProcessor(args.debug).process()
-
-        if args.process_text:
-            SpeciesProcessor(args.debug).retry_text_processing()
-
-        if args.verify_species:
-            SpeciesProcessor(args.debug).retry_missing_verifications()
+    elif command == "process-species":
+        SpeciesProcessor(args.debug).process_species()
+    elif command == "process-text":
+        SpeciesProcessor(args.debug).retry_text_processing()
+    elif command == "verify-species":
+        SpeciesProcessor(args.debug).retry_missing_verifications()
+    elif command == "species-extra":
+        SpeciesProcessor(args.debug).retry_verified_species_extra()

@@ -6,7 +6,6 @@ This script handles the following:
 - Saves the updated RAMM data and all the extracted species in `data/Oceans1876`
 """
 
-import datetime
 import json
 import logging
 import pathlib
@@ -18,14 +17,17 @@ from typing import Any, Dict, List
 import fuzzysearch
 import numpy as np
 import pandas as pd
-from utils import check_gnames_app
+
+from data.schemas.species.global_names import GNMetadata
+
+from .utils import PydanticJSONEncoder, check_gnames_app
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("HathiTrust")
 
 STATION_NAMES_MAX_LEVENSHTEIN_DISTANCE = 4
 
-WORK_DIR = pathlib.Path("../data")
+WORK_DIR = pathlib.Path("./data")
 
 RAMM_STATION_COLUMN_TYPES = {
     "Station": "object",
@@ -302,7 +304,7 @@ def run() -> None:
         for species in station_species:
             if species["name"] not in all_species_by_name:
                 with subprocess.Popen(
-                    ["gnverifier", "-f", "compact", "-s", "9", species["name"]],
+                    ["gnverifier", "-f", "compact", species["name"]],
                     stdout=subprocess.PIPE,
                 ) as gnverifier_proc:
                     if gnverifier_proc.stdout:
@@ -370,15 +372,14 @@ def run() -> None:
     with open(WORK_DIR / "Oceans1876" / "species.json", "w") as f:
         json.dump(
             {
-                "metadata": {
-                    "gnfinder": gnfinder_version,
-                    "gnverifier": gnverifier_version,
-                    "date": str(datetime.datetime.now()),
-                },
+                "metadata": GNMetadata(
+                    gnfinder=gnfinder_version, gnverifier=gnverifier_version
+                ),
                 "species": all_species_by_record_id,
             },
             f,
             indent=2,
+            cls=PydanticJSONEncoder,
         )
 
 
