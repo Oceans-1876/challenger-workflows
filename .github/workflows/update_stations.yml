@@ -27,24 +27,24 @@ jobs:
           git -c core.sshCommand="ssh -i ~/.ssh/data_submodule -F /dev/null" submodule init
           git -c core.sshCommand="ssh -i ~/.ssh/data_submodule -F /dev/null" submodule update
 
-      - name: Install gnfinder v0.16.3
+      - name: Install gnfinder v0.19.5
         working-directory: /tmp
         run: |
-          curl -L -o gnfinder-v0.16.3-linux.tar.gz https://github.com/gnames/gnfinder/releases/download/v0.16.3/gnfinder-v0.16.3-linux.tar.gz
-          tar -xf gnfinder-v0.16.3-linux.tar.gz
+          curl -L -o gnfinder-v0.19.5-linux.tar.gz https://github.com/gnames/gnfinder/releases/download/v0.19.5/gnfinder-v0.19.5-linux.tar.gz
+          tar -xf gnfinder-v0.19.5-linux.tar.gz
           sudo mv gnfinder /bin
 
-      - name: Install gnverifier v0.5.2
+      - name: Install gnverifier v1.0.0-RC1
         working-directory: /tmp
         run: |
-          curl -L -o gnverifier-v0.5.2-linux.tar.gz https://github.com/gnames/gnverifier/releases/download/v0.5.2/gnverifier-v0.5.2-linux.tar.gz
-          tar -xf gnverifier-v0.5.2-linux.tar.gz
+          curl -L -o gnverifier-v1.0.0-RC1-linux.tar.gz https://github.com/gnames/gnverifier/releases/download/v1.0.0-RC1/gnverifier-v1.0.0-RC1-linux.tar.gz
+          tar -xf gnverifier-v1.0.0-RC1-linux.tar.gz
           sudo mv gnverifier /bin
 
-      - name: Setup Python 3.9
+      - name: Setup Python 3.10
         uses: actions/setup-python@v2
         with:
-          python-version: '3.9'
+          python-version: '3.10'
 
       - name: Install python requirements
         run: |
