@@ -1,12 +1,11 @@
 """
 This script handles the following:
-- Extract stations' text from the OCRed text by HathiTrust (`data/HathiTrust`)
-- Parse and verify species from the extracted stations' text
-- Attach the extract texts and species to the RAMM data (`data/RAMM/stations.csv`)
-- Saves the update RAMM data and all the extracted species in `data/Oceans1876`
+- Extracts stations' text from the OCRed text by HathiTrust (`data/HathiTrust`)
+- Parses and verifies species from the extracted stations' text
+- Attaches the extracted texts and species to the RAMM data (`data/RAMM/stations.csv`)
+- Saves the updated RAMM data and all the extracted species in `data/Oceans1876`
 """
 
-import datetime
 import json
 import logging
 import pathlib
@@ -18,14 +17,17 @@ from typing import Any, Dict, List
 import fuzzysearch
 import numpy as np
 import pandas as pd
-from utils import check_gnames_app
+
+from data.schemas.species.global_names import GNMetadata
+
+from .utils import PydanticJSONEncoder, check_gnames_app
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("HathiTrust")
 
 STATION_NAMES_MAX_LEVENSHTEIN_DISTANCE = 4
 
-WORK_DIR = pathlib.Path("../data")
+WORK_DIR = pathlib.Path("./data")
 
 RAMM_STATION_COLUMN_TYPES = {
     "Station": "object",
@@ -139,8 +141,8 @@ RAMM_STATION_COLUMN_TYPES = {
 
 
 def run() -> None:
-    gnfinder_version = check_gnames_app("gnfinder", 0.16)
-    gnverifier_version = check_gnames_app("gnverifier", 0.6)
+    gnfinder_version = check_gnames_app("gnfinder")
+    gnverifier_version = check_gnames_app("gnverifier")
 
     # Load all columns as string, i.e. dtype="object"
     ramm_stations = pd.read_csv(WORK_DIR / "RAMM" / "stations.csv", dtype="object")
@@ -302,7 +304,7 @@ def run() -> None:
         for species in station_species:
             if species["name"] not in all_species_by_name:
                 with subprocess.Popen(
-                    ["gnverifier", "-f", "compact", "-s", "9", species["name"]],
+                    ["gnverifier", "-f", "compact", species["name"]],
                     stdout=subprocess.PIPE,
                 ) as gnverifier_proc:
                     if gnverifier_proc.stdout:
@@ -370,15 +372,14 @@ def run() -> None:
     with open(WORK_DIR / "Oceans1876" / "species.json", "w") as f:
         json.dump(
             {
-                "metadata": {
-                    "gnfinder": gnfinder_version,
-                    "gnverifier": gnverifier_version,
-                    "date": str(datetime.datetime.now()),
-                },
+                "metadata": GNMetadata(
+                    gnfinder=gnfinder_version, gnverifier=gnverifier_version
+                ),
                 "species": all_species_by_record_id,
             },
             f,
             indent=2,
+            cls=PydanticJSONEncoder,
         )
 
 
