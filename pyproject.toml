@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "challenger-workflows"
+version = "0.1.0"
+description = ""
+repository = "https://github.com/Oceans-1876/challenger-workflows"
+authors = ["Kaveh Karimi-Asli <kaveh@illinois.edu>"]
+license = "BSD-3-Clause"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "~3.10"
+fuzzysearch = "~0.7"
+opencv-python = "~4.5"
+pandas = "~1.4"
+pytesseract = "~0.3"
+requests = "~2.27"
+pydantic = "^1.9"
+
+[tool.poetry.dev-dependencies]
+pre-commit = "~2.19"
+ipython = "~8.3"
+black = "~22.3"
+mypy = "~0.950"
+isort = "~5.10"
+autoflake = "~1.4"
+flake8 = "~4.0"
+types-requests = "~2.27"
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3

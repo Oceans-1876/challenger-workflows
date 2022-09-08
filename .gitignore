@@ -1,9 +1,12 @@
-outputs/
-resources/
 venv/
+.vscode/
 
+.env
 *.pdf
 *.txt
 *.py[cod]
 *.log
 *.png
+*.zip
+
+!.gitkeep
