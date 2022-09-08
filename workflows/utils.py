@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 logger = logging.getLogger("Utils")
 
-GNAMES_VERSIONS = {"gnfinder": 0.19, "gnverifier": 1.0}
+GNAMES_VERSIONS = {"gnfinder": 1.0, "gnverifier": 1.0}
 
 
 def check_gnames_app(app_name: str) -> str:

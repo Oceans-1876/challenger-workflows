@@ -227,13 +227,17 @@ def run() -> None:
             for section_idx, (section, pages) in enumerate(station["Range"]):
                 # Each section page range (`pages`) is a string
                 # in the following format: "<start>-<end>"
-                for page_idx, page in enumerate(pages.split("-")):
+                pages_range = [int(p) for p in pages.split("-")]
+                if len(pages_range) == 1:
+                    pages_range.append(pages_range[0])
+                pages_range[1] += 1
+                for page_idx, page in enumerate(range(*pages_range)):
                     filename = (
                         WORK_DIR
                         / "HathiTrust"
                         / section
                         / "texts"
-                        / f"{int(page) - 1:08}.txt"
+                        / f"{page - 1:08}.txt"
                     )
                     try:
                         with open(filename, "r") as f:
@@ -255,7 +259,7 @@ def run() -> None:
                                     # update the previous station and remove
                                     # the part that belongs to the new station
                                     update_previous_station_text(
-                                        idx, page, page_text, results[0].start
+                                        idx, str(page), page_text, results[0].start
                                     )
                             else:
                                 logger.warning(
