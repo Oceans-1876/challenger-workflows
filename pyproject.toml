@@ -4,7 +4,7 @@ version = "0.1.0"
 description = ""
 repository = "https://github.com/Oceans-1876/challenger-workflows"
 authors = ["Kaveh Karimi-Asli <kaveh@illinois.edu>"]
-license = "BSD-3-Clause"
+license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
