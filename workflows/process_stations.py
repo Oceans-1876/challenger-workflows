@@ -6,11 +6,11 @@ This script handles the following:
 - Saves the updated RAMM data and all the extracted species in `data/Oceans1876`
 """
 
+import argparse
 import json
 import logging
 import pathlib
 import re
-import subprocess
 import sys
 from typing import Any, Dict, List
 
@@ -20,7 +20,8 @@ import pandas as pd
 
 from data.schemas.species.global_names import GNMetadata
 
-from .utils import PydanticJSONEncoder, check_gnames_app
+from .gnames import GNames
+from .utils import PydanticJSONEncoder
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("HathiTrust")
@@ -28,6 +29,10 @@ logger = logging.getLogger("HathiTrust")
 STATION_NAMES_MAX_LEVENSHTEIN_DISTANCE = 4
 
 WORK_DIR = pathlib.Path("./data")
+
+DEBUG_OUTPUT_PATH = WORK_DIR / "tmp" / "stations"
+if not DEBUG_OUTPUT_PATH.exists():
+    DEBUG_OUTPUT_PATH.mkdir(parents=True)
 
 RAMM_STATION_COLUMN_TYPES = {
     "Station": "object",
@@ -140,9 +145,8 @@ RAMM_STATION_COLUMN_TYPES = {
 }
 
 
-def run() -> None:
-    gnfinder_version = check_gnames_app("gnfinder")
-    gnverifier_version = check_gnames_app("gnverifier")
+def run(debug: bool = False) -> None:
+    gnames = GNames()
 
     # Load all columns as string, i.e. dtype="object"
     ramm_stations = pd.read_csv(WORK_DIR / "RAMM" / "stations.csv", dtype="object")
@@ -217,6 +221,8 @@ def run() -> None:
                     f"{previous_station['Station']}"
                 )
 
+    station_text_identifier = None
+    page_text = None
     for idx, station in hathitrust_stations.iterrows():
         station_text_identifier = station["Text Identifier"]
         logger.info(f"Processing {station_text_identifier}")
@@ -273,11 +279,13 @@ def run() -> None:
 
             stations_texts[station_text_identifier] = station_text
 
+    if station_text_identifier and page_text:
+        stations_texts[station_text_identifier].append(page_text)
+
     hathitrust_stations["Text"] = hathitrust_stations["Text Identifier"].map(
         lambda text_id: "\n".join(stations_texts[text_id])
     )
 
-    all_species_by_name = {}  # Holds all species across all stations by name
     all_species_by_record_id: Dict[
         str, Dict[str, Any]
     ] = {}  # Holds all species across all stations by record id
@@ -290,55 +298,25 @@ def run() -> None:
         logger.info(f"Getting species for {text_identifier}")
 
         # Use gnfinder to parse species from station text without verification
-        with subprocess.Popen(["echo", text_str], stdout=subprocess.PIPE) as echo_proc:
-            with subprocess.Popen(
-                ["gnfinder", "-f", "compact", "-w", "2"],
-                stdin=echo_proc.stdout,
-                stdout=subprocess.PIPE,
-            ) as gnfinder_proc:
-                if gnfinder_proc.stdout:
-                    station_species = (
-                        json.loads(gnfinder_proc.stdout.read())["names"] or []
-                    )
+        station_species = gnames.extract(text_str)
 
         stations_species[text_identifier] = station_species
 
         # Use gnverifier to verify the parsed species,
         # if they are not already in `all_species_by_name`
         for species in station_species:
-            if species["name"] not in all_species_by_name:
-                with subprocess.Popen(
-                    ["gnverifier", "-f", "compact", species["name"]],
-                    stdout=subprocess.PIPE,
-                ) as gnverifier_proc:
-                    if gnverifier_proc.stdout:
-                        verified_species = json.loads(gnverifier_proc.stdout.read())
-                        all_species_by_name[species["name"]] = verified_species
-                        match_type = verified_species["matchType"]
-                        record_id = verified_species.get("bestResult", {}).get(
-                            "recordId", None
-                        )
-                        if record_id:
-                            species["recordId"] = record_id
-                            if record_id in all_species_by_record_id:
-                                if (
-                                    match_type == "Exact"
-                                    and all_species_by_record_id[record_id]["matchType"]
-                                    != "Exact"
-                                ):
-                                    all_species_by_record_id[
-                                        record_id
-                                    ] = verified_species
-                            else:
-                                all_species_by_record_id[record_id] = verified_species
-            else:
-                record_id = (
-                    all_species_by_name[species["name"]]
-                    .get("bestResult", {})
-                    .get("recordId", None)
-                )
-                if record_id:
-                    species["recordId"] = record_id
+            verified_species = gnames.verify(species["name"])
+            record_id = verified_species.get("bestResult", {}).get("recordId", None)
+            if record_id:
+                species["recordId"] = record_id
+                if record_id in all_species_by_record_id:
+                    if (
+                        verified_species["matchType"] == "Exact"
+                        and all_species_by_record_id[record_id]["matchType"] != "Exact"
+                    ):
+                        all_species_by_record_id[record_id] = verified_species
+                else:
+                    all_species_by_record_id[record_id] = verified_species
 
     # Rename temp columns so they can be aggregated into one column
     fathom_temp_f = ramm_stations.filter(regex="Temp(.*)")
@@ -372,12 +350,19 @@ def run() -> None:
         WORK_DIR / "Oceans1876" / "stations.json", orient="records", indent=2
     )
 
+    if debug:
+        for idx, station in ramm_stations.iterrows():
+            station.to_json(
+                DEBUG_OUTPUT_PATH / f"{idx+1:03}_{station.Station}.json", indent=2
+            )
+
     # Save all species data
     with open(WORK_DIR / "Oceans1876" / "species.json", "w") as f:
         json.dump(
             {
                 "metadata": GNMetadata(
-                    gnfinder=gnfinder_version, gnverifier=gnverifier_version
+                    gnfinder=gnames.app_versions["gnfinder"],
+                    gnverifier=gnames.app_versions["gnverifier"],
                 ),
                 "species": all_species_by_record_id,
             },
@@ -388,4 +373,13 @@ def run() -> None:
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--debug",
+        "-d",
+        action="store_true",
+        help="Enable debug logging",
+    )
+    args = parser.parse_args()
+
+    run(args.debug)

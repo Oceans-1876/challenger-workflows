@@ -8,7 +8,6 @@ import json
 import logging
 import pathlib
 import re
-import subprocess
 import sys
 import threading
 import time
@@ -43,7 +42,8 @@ from data.schemas.species.species_index import (
     SpeciesIndexVerifiedJSONExtra,
 )
 
-from .utils import PydanticJSONEncoder, check_gnames_app
+from .gnames import GNames
+from .utils import PydanticJSONEncoder
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-8s %(message)s")
 logger = logging.getLogger("Species Extractor")
@@ -53,9 +53,9 @@ DATA_SOURCES_FILE_PATH = WORK_DIR / "Oceans1876" / "data_sources.json"
 DATA_PATH = WORK_DIR / "HathiTrust" / "sec.6 v.2" / "images"
 OUTPUT_PATH = WORK_DIR / "Oceans1876"
 
-DEBUG_OUTPUT_PATH = WORK_DIR / "tmp"
+DEBUG_OUTPUT_PATH = WORK_DIR / "tmp" / "ocr"
 if not DEBUG_OUTPUT_PATH.exists():
-    DEBUG_OUTPUT_PATH.mkdir()
+    DEBUG_OUTPUT_PATH.mkdir(parents=True)
 
 
 INDEX_PAGES = range(739, 849)
@@ -65,7 +65,7 @@ EXTRA_INFO_DATA_SOURCES = ["9", "181"]  # WoRMS  # IRMNG
 
 class SpeciesProcessor:
     def __init__(self, debug: bool = False):
-        self.gnverifier_version = check_gnames_app("gnverifier")
+        self.gnames = GNames()
         self.debug = debug
         self.data_sources = parse_file_as(DataSources, DATA_SOURCES_FILE_PATH)
         self.species: List[SpeciesIndexGenus] = []
@@ -655,27 +655,19 @@ class SpeciesProcessor:
     def verify_species(
         self, name: str, species: Union[SpeciesIndexGenus, SpeciesIndexSpecies]
     ) -> None:
-        with subprocess.Popen(
-            ["gnverifier", "-f", "compact", name],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        ) as gnverifier_proc:
-            if gnverifier_proc.stdout:
-                verified_species = json.loads(gnverifier_proc.stdout.read())
-                result = verified_species.get("bestResult")
-                if result:
-                    record_id = result.get("recordId")
-                    if record_id:
-                        species.matched_species = record_id  # type: ignore
-                        self.species_verified[record_id] = GNVerifierMatchedSpecies(
-                            **result
-                        )
-                        thread = threading.Thread(
-                            target=self.get_verified_species_extra,
-                            args=(self.species_verified[record_id],),
-                        )
-                        thread.start()
-                        self.species_extra_threads.append(thread)
+        verified_species = self.gnames.verify(name)
+        result = verified_species.get("bestResult")
+        if result:
+            record_id = result.get("recordId")
+            if record_id:
+                species.matched_species = record_id  # type: ignore
+                self.species_verified[record_id] = GNVerifierMatchedSpecies(**result)
+                thread = threading.Thread(
+                    target=self.get_verified_species_extra,
+                    args=(self.species_verified[record_id],),
+                )
+                thread.start()
+                self.species_extra_threads.append(thread)
 
     def prepare_data_source_url(
         self,
@@ -878,7 +870,7 @@ class SpeciesProcessor:
         for thread in self.species_verification_threads:
             thread.join()
 
-        metadata = GNMetadata(gnverifier=self.gnverifier_version)
+        metadata = GNMetadata(gnverifier=self.gnames.app_versions["gnverifier"])
 
         with open(OUTPUT_PATH / "index_species.json", "w") as f:
             json.dump(
