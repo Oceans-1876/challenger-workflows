@@ -1,3 +1,4 @@
+import argparse
 import logging
 from typing import Dict, List
 
@@ -5,6 +6,7 @@ import pandas as pd
 
 from .gnames import GNames
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Plymouth")
 
 taxa_priorities = [
@@ -13,6 +15,48 @@ taxa_priorities = [
     "order",
     "family",
 ]
+
+
+def clean_data() -> None:
+    all_species = pd.read_csv("data/Plymouth/all_species.csv", keep_default_na=False)
+
+    all_species["Genus"] = all_species["Genus"].apply(
+        lambda x: x.strip().replace(" ", "").capitalize()
+    )
+    all_species["Species"] = all_species["Species"].str.strip().replace(" ", "")
+
+    all_species["WoRMS ID"] = None
+    all_species["WoRMS Taxa"] = None
+
+    gnames = GNames()
+
+    for idx, species_row in all_species.iterrows():
+        sp = f"{species_row['Genus']} {species_row['Species']}"
+        logger.info(f"Processing {idx} - {sp}")
+        verified_species = gnames.verify(sp, ["9"]).get("bestResult")
+        if verified_species:
+            all_species.at[idx, "WoRMS ID"] = verified_species["recordId"]
+            if verified_species.get("classificationPath"):
+                classification_path = verified_species["classificationPath"].split("|")
+                classification_ranks = verified_species["classificationRanks"].split(
+                    "|"
+                )
+                for tp in taxa_priorities:
+                    try:
+                        (_rank, taxa) = next(
+                            filter(
+                                lambda x: tp in x[0].lower(),
+                                zip(classification_ranks, classification_path),
+                            )
+                        )
+                        all_species.at[idx, "WoRMS Taxa"] = taxa
+                        break
+                    except StopIteration:
+                        continue
+        else:
+            logger.warning(f"Species not found: {idx} - {sp}")
+
+    all_species.to_csv("data/Plymouth/all_species_updated.csv", index=False)
 
 
 def update_data() -> None:
@@ -119,21 +163,24 @@ def update_data() -> None:
             species_row["sp_concat"].capitalize(), ["9"]
         ).get("bestResult")
         if verified_species:
-            species_row["WoRMS ID"] = verified_species["recordId"]
-            classification_path = verified_species["classificationPath"].split("|")
-            classification_ranks = verified_species["classificationRanks"].split("|")
-            for tp in taxa_priorities:
-                try:
-                    (_rank, taxa) = next(
-                        filter(
-                            lambda x: tp in x[0].lower(),
-                            zip(classification_ranks, classification_path),
+            plymouth_species.at[idx, "WoRMS ID"] = verified_species["recordId"]
+            if verified_species.get("classificationPath"):
+                classification_path = verified_species["classificationPath"].split("|")
+                classification_ranks = verified_species["classificationRanks"].split(
+                    "|"
+                )
+                for tp in taxa_priorities:
+                    try:
+                        (_rank, taxa) = next(
+                            filter(
+                                lambda x: tp in x[0].lower(),
+                                zip(classification_ranks, classification_path),
+                            )
                         )
-                    )
-                    species_row["WoRMS Taxa"] = taxa
-                    break
-                except StopIteration:
-                    continue
+                        plymouth_species.at[idx, "WoRMS Taxa"] = taxa
+                        break
+                    except StopIteration:
+                        continue
         else:
             logger.warning(f"Species not found: {idx} - {species_row}")
 
@@ -143,4 +190,19 @@ def update_data() -> None:
 
 
 if __name__ == "__main__":
-    update_data()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+    )
+    args = parser.parse_args()
+
+    if args.clean:
+        clean_data()
+
+    if args.update:
+        update_data()
